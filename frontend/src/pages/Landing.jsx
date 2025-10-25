@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 const FogOfWar = () => {
     return (
       <div className="dark">
@@ -39,9 +41,11 @@ const FogOfWar = () => {
                               Enter the fog, secure encrypted loot, and extract to claim your earnings on the Solana blockchain.
                             </h2>
                           </div>
+                          <Link to='/dashboard/'>
                           <button className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-6 @[480px]:h-14 @[480px]:px-8 bg-primary text-background-dark text-base font-bold leading-normal tracking-[0.015em] @[480px]:text-lg @[480px]:font-bold @[480px]:leading-normal @[480px]:tracking-[0.015em] hover:bg-primary/90 transition-colors transform hover:scale-105">
                             <span className="truncate">View Active Games</span>
                           </button>
+                          </Link>
                         </div>
                       </div>
                     </div>
