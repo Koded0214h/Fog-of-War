@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
+from datetime import timezone
 from decimal import Decimal
 import json
 from .models import GameSession, PlayerSession, LootItem, GameEvent, Transaction
