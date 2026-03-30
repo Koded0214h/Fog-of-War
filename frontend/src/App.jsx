@@ -6,6 +6,7 @@ import GameCanvas from './components/GameCanvas';
 import GamePage from './pages/GamePage';
 import HallOfFame from './pages/HallOfFame';
 import Profile from './pages/Profile';
+import FogOfWar from './pages/Landing';
 
 function App() {
   return (
@@ -18,6 +19,8 @@ function App() {
         <Route path='/profile' element={<Profile />} />
 
         <Route path='/test-game/' element={<GamePage />} />
+
+        <Route path='/fog-of-war/' element={<FogOfWar />} />
 
 
       </Routes>
