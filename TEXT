@@ -1,0 +1,109 @@
+    149          id: p.getId(), username: p.getUsername(),                                                                                                                    
+      150          x: p.getX(), y: p.getY(),                                                                                                                                    
+      151          health: p.getHealth(), status: p.getStatus(), kills: p.getKills(),
+      152 +        treasure: p.getTreasure(),                                                                                                                                   
+      153        }));                                                                                                                                                         
+      154        const loot_items = r.getLootItemsList().map(l => ({                                                                                                            
+      155          id: l.getId(), item_type: l.getItemType(),                                                                                                                 
+
+⏺ Step 5 — socket.js: use server treasure + detect elimination:
+                                                                                          
+⏺ Update(~/Code/Fog-of-War/fog-of-war/client/src/socket.js)
+  ⎿  Added 2 lines, removed 3 lines                                                                                                                                             
+      111        const store = useGameStore.getState();
+      112        const myId  = store.myId;                                                                                                                                      
+      113                                                                                                                                                                     
+      114 -      // Build players map preserving existing treasure counts                                                                                                       
+      115 -      const prevPlayers = store.players || {};                                                                                                                     
+      114 +      // Build players map — treasure is authoritative from server                                                                                                   
+      115        const players = {};                                                                                                                                          
+      116        (update.players || []).forEach(p => {
+      117          players[p.id] = {
+     ...
+      119            username: p.username || 'Player',
+      120            pos:      { x: p.x, y: p.y },
+      121            hp:       p.health,
+      123 -          treasure: prevPlayers[p.id]?.treasure ?? 0,                                                                                                         
+      122 +          treasure: p.treasure ?? 0,                                                                                                                          
+      123            status:   p.status,
+      124            kills:    p.kills ?? 0,
+      125          };
+
+⏺ Now remove the stale event-based treasure counting and add the elimination check:
+                                                                                          
+⏺ Update(~/Code/Fog-of-War/fog-of-war/client/src/socket.js)
+  ⎿  Removed 3 lines                                                                                                                                                            
+      165            bloodHuntActive = true;
+      166            bloodHuntTarget = ev.player_id;                                                                                                                            
+      167          }                                                                                                                                                          
+      168 -        if (ev.event_type === 'loot' && ev.player_id === myId) {                                                                                                     
+      169 -          if (players[myId]) players[myId].treasure = (players[myId].treasure || 0) + 1;                                                                           
+      170 -        }                                                                                                                                                            
+      168        });                                                                                                                                                          
+      169  
+      170        const remaining    = update.remaining_seconds ?? store.timeLeft;
+
+⏺ Now add elimination detection right after applyTick:
+                                                                                          
+⏺ Update(~/Code/Fog-of-War/fog-of-war/client/src/socket.js)
+  ⎿  Added 9 lines                                                                                                                                                              
+      183          leaderboard:     leaderboard.map(p => ({ id: p.id, treasure: p.treasure || 0, hp: p.hp })),
+      184        });                                                                                                                                                            
+      185                                                                                                                                                                     
+      186 +      // Eliminated: current player's HP hit 0 — go to results immediately                                                                                           
+      187 +      const myPlayer = players[myId];                                                                                                                         
+      188 +      if (myPlayer?.status === 'eliminated' && useGameStore.getState().screen === 'game') {                                                                          
+      189 +        const fee   = store.lobbyFee || 0;                                                                                                                    
+      190 +        const count = Object.keys(players).length;                                                                                                            
+      191 +        const prize = (count * fee * 0.9).toFixed(2);                                                                                                         
+      192 +        useGameStore.getState().setResults(gameWinner, prize, payoutTx);                                                                                      
+      193 +      }                                                                                                                                                       
+      194 +                                                                                                                                                              
+      195        if (gameOver) {
+      196          const fee   = store.lobbyFee || 0;
+      197          const count = Object.keys(players).length;
+
+⏺ Now rebuild the server to confirm it still compiles:
+                                                                                          
+⏺ Bash(go build ./... 2>&1)       
+  ⎿  (No output)                                                                                                                                                                
+                                  
+⏺ Both bugs fixed. Summary of what changed:                                                                                                                                     
+                                                                                                                                                                              
+  Loot / treasure not counting:                                                                                                                                                 
+  - Added int32 treasure = 8 to the Player proto message                                                                                                                        
+  - Server now sends the authoritative treasure count on every tick (from p.Treasure in engine state)                                                                           
+  - Removed the fragile client-side event-counting approach — treasure now comes straight from the server, same as HP and kills                                                 
+                                                                                                                                                                                
+  Player not removed when HP = 0:                                                                                                                                               
+  - After each server tick, if players[myId].status === 'eliminated', the client immediately transitions to the results screen showing "YOU FELL IN THE FOG"                    
+  - Other players already couldn't see eliminated players (the if (p.status === 'eliminated') return render skip was already there)                                             
+                                                                                                                                                                                
+  Restart the server and reload the frontend to pick up the changes.                                                                                                            
+                                                                                                                                                                                
+✻ Cooked for 9m 18s                                                                                                                                                             
+                                                                                                                                                                                
+⏺ Background command "Find protoc-gen-grpc-web plugin" completed (exit code 0)
+                                                                                                                                                                                
+⏺ That's just the background find command from earlier — already resolved, the plugin was at node_modules/.bin/protoc-gen-grpc-web and the proto regeneration completed
+  successfully.                                                                                                                                                                 
+                                                            
+❯ im literally on a loot, and nothing happens, FIX LOOT COLLECTION very important                                                                                               
+                                                                                                                                  
+⏺ Let me look at the actual server-side Move handler and add some debug logging to trace why loot isn't collecting:                                                             
+                                                                                                                                                                                
+  Read 1 file (ctrl+o to expand)                                                                                                                                                
+  ⎿  You've hit your limit · resets 3am (Africa/Lagos)                                                                                                                          
+                                                                                                                                                                                
+✻ Worked for 2m 3s                                                                                                                                                              
+                                                                                          
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                                                                                                                                               
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ accept edits on (shift+tab to cycle)                                                                                                                                       
+                                                                                                                                                                                
+
+                                                                                                                                                                                
+Hi claude, ive fixed most of the logic, an di need your helpwith a few things, the svg characters in solo mode should also show in the main game sesion as players, and the payouts doesnt
+  seem to work, maybe casue i set the amount to be 0SOL, since i currently dont have any SOL, let do these first                                                                                                                    
+                                                                                                                                                                              

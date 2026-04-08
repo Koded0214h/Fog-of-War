@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/koded/fog-of-war/server/internal/api"
@@ -16,13 +18,16 @@ import (
 )
 
 func main() {
-	// 1. Initialize Game Manager
+	// 1. Initialize services
 	arbitrum, err := services.NewArbitrumService()
 	if err != nil {
 		log.Fatalf("Failed to init Arbitrum service: %v", err)
 	}
 
-	manager := engine.NewGameManager(arbitrum)
+	solana := services.NewSolanaService()
+	solana.AirdropIfLow(context.Background())
+
+	manager := engine.NewGameManager(arbitrum, solana)
 
 	// 2. Setup gRPC Server
 	grpcServer := grpc.NewServer()
@@ -58,10 +63,20 @@ func main() {
 		ExposedHeaders: []string{"grpc-status", "grpc-message"},
 	}).Handler(wrappedGrpc)
 
-	fmt.Printf("gRPC-Web server listening on https://localhost:%d\n", webPort)
+	// 6. Setup health check endpoint (for cron job keep-alive)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"status":"ok","timestamp":%d}`, time.Now().Unix())
+	})
+	mux.Handle("/", corsHandler)
+
+	fmt.Printf("gRPC-Web server listening on http://localhost:%d\n", webPort)
+	fmt.Printf("Health check endpoint: http://localhost:%d/health\n", webPort)
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", webPort),
-		Handler: corsHandler,
+		Handler: mux,
 	}
 
 	if err := httpServer.ListenAndServe(); err != nil {

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v7.34.0
-// source: server/proto/game.proto
+// source: game.proto
 
 package proto
 
@@ -121,13 +121,21 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "server/proto/game.proto",
+	Metadata: "game.proto",
 }
 
 const (
-	GameService_Connect_FullMethodName     = "/game.GameService/Connect"
-	GameService_Move_FullMethodName        = "/game.GameService/Move"
-	GameService_CollectLoot_FullMethodName = "/game.GameService/CollectLoot"
+	GameService_CreateSession_FullMethodName  = "/game.GameService/CreateSession"
+	GameService_ListSessions_FullMethodName   = "/game.GameService/ListSessions"
+	GameService_JoinSession_FullMethodName    = "/game.GameService/JoinSession"
+	GameService_StartGame_FullMethodName      = "/game.GameService/StartGame"
+	GameService_WatchLobby_FullMethodName     = "/game.GameService/WatchLobby"
+	GameService_GetHouseWallet_FullMethodName = "/game.GameService/GetHouseWallet"
+	GameService_ConfirmDeposit_FullMethodName = "/game.GameService/ConfirmDeposit"
+	GameService_Connect_FullMethodName        = "/game.GameService/Connect"
+	GameService_Move_FullMethodName           = "/game.GameService/Move"
+	GameService_CollectLoot_FullMethodName    = "/game.GameService/CollectLoot"
+	GameService_Attack_FullMethodName         = "/game.GameService/Attack"
 )
 
 // GameServiceClient is the client API for GameService service.
@@ -136,11 +144,20 @@ const (
 //
 // Game Service
 type GameServiceClient interface {
-	// Connect to a game session and receive a stream of updates
+	// Session lifecycle
+	CreateSession(ctx context.Context, in *CreateSessionRequest, opts ...grpc.CallOption) (*CreateSessionResponse, error)
+	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
+	JoinSession(ctx context.Context, in *JoinSessionRequest, opts ...grpc.CallOption) (*JoinSessionResponse, error)
+	StartGame(ctx context.Context, in *StartGameRequest, opts ...grpc.CallOption) (*StartGameResponse, error)
+	WatchLobby(ctx context.Context, in *WatchLobbyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LobbyUpdate], error)
+	// Escrow / payments
+	GetHouseWallet(ctx context.Context, in *GetHouseWalletRequest, opts ...grpc.CallOption) (*GetHouseWalletResponse, error)
+	ConfirmDeposit(ctx context.Context, in *ConfirmDepositRequest, opts ...grpc.CallOption) (*ConfirmDepositResponse, error)
+	// In-game
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GameStateUpdate], error)
-	// Send player actions
 	Move(ctx context.Context, in *MoveRequest, opts ...grpc.CallOption) (*MoveResponse, error)
 	CollectLoot(ctx context.Context, in *CollectLootRequest, opts ...grpc.CallOption) (*CollectLootResponse, error)
+	Attack(ctx context.Context, in *AttackRequest, opts ...grpc.CallOption) (*AttackResponse, error)
 }
 
 type gameServiceClient struct {
@@ -151,9 +168,88 @@ func NewGameServiceClient(cc grpc.ClientConnInterface) GameServiceClient {
 	return &gameServiceClient{cc}
 }
 
+func (c *gameServiceClient) CreateSession(ctx context.Context, in *CreateSessionRequest, opts ...grpc.CallOption) (*CreateSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateSessionResponse)
+	err := c.cc.Invoke(ctx, GameService_CreateSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameServiceClient) ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSessionsResponse)
+	err := c.cc.Invoke(ctx, GameService_ListSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameServiceClient) JoinSession(ctx context.Context, in *JoinSessionRequest, opts ...grpc.CallOption) (*JoinSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinSessionResponse)
+	err := c.cc.Invoke(ctx, GameService_JoinSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameServiceClient) StartGame(ctx context.Context, in *StartGameRequest, opts ...grpc.CallOption) (*StartGameResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartGameResponse)
+	err := c.cc.Invoke(ctx, GameService_StartGame_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameServiceClient) WatchLobby(ctx context.Context, in *WatchLobbyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LobbyUpdate], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &GameService_ServiceDesc.Streams[0], GameService_WatchLobby_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchLobbyRequest, LobbyUpdate]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type GameService_WatchLobbyClient = grpc.ServerStreamingClient[LobbyUpdate]
+
+func (c *gameServiceClient) GetHouseWallet(ctx context.Context, in *GetHouseWalletRequest, opts ...grpc.CallOption) (*GetHouseWalletResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetHouseWalletResponse)
+	err := c.cc.Invoke(ctx, GameService_GetHouseWallet_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameServiceClient) ConfirmDeposit(ctx context.Context, in *ConfirmDepositRequest, opts ...grpc.CallOption) (*ConfirmDepositResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmDepositResponse)
+	err := c.cc.Invoke(ctx, GameService_ConfirmDeposit_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gameServiceClient) Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GameStateUpdate], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &GameService_ServiceDesc.Streams[0], GameService_Connect_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &GameService_ServiceDesc.Streams[1], GameService_Connect_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -190,17 +286,36 @@ func (c *gameServiceClient) CollectLoot(ctx context.Context, in *CollectLootRequ
 	return out, nil
 }
 
+func (c *gameServiceClient) Attack(ctx context.Context, in *AttackRequest, opts ...grpc.CallOption) (*AttackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AttackResponse)
+	err := c.cc.Invoke(ctx, GameService_Attack_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GameServiceServer is the server API for GameService service.
 // All implementations must embed UnimplementedGameServiceServer
 // for forward compatibility.
 //
 // Game Service
 type GameServiceServer interface {
-	// Connect to a game session and receive a stream of updates
+	// Session lifecycle
+	CreateSession(context.Context, *CreateSessionRequest) (*CreateSessionResponse, error)
+	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	JoinSession(context.Context, *JoinSessionRequest) (*JoinSessionResponse, error)
+	StartGame(context.Context, *StartGameRequest) (*StartGameResponse, error)
+	WatchLobby(*WatchLobbyRequest, grpc.ServerStreamingServer[LobbyUpdate]) error
+	// Escrow / payments
+	GetHouseWallet(context.Context, *GetHouseWalletRequest) (*GetHouseWalletResponse, error)
+	ConfirmDeposit(context.Context, *ConfirmDepositRequest) (*ConfirmDepositResponse, error)
+	// In-game
 	Connect(*ConnectRequest, grpc.ServerStreamingServer[GameStateUpdate]) error
-	// Send player actions
 	Move(context.Context, *MoveRequest) (*MoveResponse, error)
 	CollectLoot(context.Context, *CollectLootRequest) (*CollectLootResponse, error)
+	Attack(context.Context, *AttackRequest) (*AttackResponse, error)
 	mustEmbedUnimplementedGameServiceServer()
 }
 
@@ -211,6 +326,27 @@ type GameServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedGameServiceServer struct{}
 
+func (UnimplementedGameServiceServer) CreateSession(context.Context, *CreateSessionRequest) (*CreateSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSession not implemented")
+}
+func (UnimplementedGameServiceServer) ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
+}
+func (UnimplementedGameServiceServer) JoinSession(context.Context, *JoinSessionRequest) (*JoinSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinSession not implemented")
+}
+func (UnimplementedGameServiceServer) StartGame(context.Context, *StartGameRequest) (*StartGameResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartGame not implemented")
+}
+func (UnimplementedGameServiceServer) WatchLobby(*WatchLobbyRequest, grpc.ServerStreamingServer[LobbyUpdate]) error {
+	return status.Error(codes.Unimplemented, "method WatchLobby not implemented")
+}
+func (UnimplementedGameServiceServer) GetHouseWallet(context.Context, *GetHouseWalletRequest) (*GetHouseWalletResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetHouseWallet not implemented")
+}
+func (UnimplementedGameServiceServer) ConfirmDeposit(context.Context, *ConfirmDepositRequest) (*ConfirmDepositResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmDeposit not implemented")
+}
 func (UnimplementedGameServiceServer) Connect(*ConnectRequest, grpc.ServerStreamingServer[GameStateUpdate]) error {
 	return status.Error(codes.Unimplemented, "method Connect not implemented")
 }
@@ -219,6 +355,9 @@ func (UnimplementedGameServiceServer) Move(context.Context, *MoveRequest) (*Move
 }
 func (UnimplementedGameServiceServer) CollectLoot(context.Context, *CollectLootRequest) (*CollectLootResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CollectLoot not implemented")
+}
+func (UnimplementedGameServiceServer) Attack(context.Context, *AttackRequest) (*AttackResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Attack not implemented")
 }
 func (UnimplementedGameServiceServer) mustEmbedUnimplementedGameServiceServer() {}
 func (UnimplementedGameServiceServer) testEmbeddedByValue()                     {}
@@ -239,6 +378,125 @@ func RegisterGameServiceServer(s grpc.ServiceRegistrar, srv GameServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&GameService_ServiceDesc, srv)
+}
+
+func _GameService_CreateSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).CreateSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_CreateSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).CreateSession(ctx, req.(*CreateSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameService_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).ListSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_ListSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).ListSessions(ctx, req.(*ListSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameService_JoinSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).JoinSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_JoinSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).JoinSession(ctx, req.(*JoinSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameService_StartGame_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartGameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).StartGame(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_StartGame_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).StartGame(ctx, req.(*StartGameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameService_WatchLobby_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchLobbyRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(GameServiceServer).WatchLobby(m, &grpc.GenericServerStream[WatchLobbyRequest, LobbyUpdate]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type GameService_WatchLobbyServer = grpc.ServerStreamingServer[LobbyUpdate]
+
+func _GameService_GetHouseWallet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetHouseWalletRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).GetHouseWallet(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_GetHouseWallet_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).GetHouseWallet(ctx, req.(*GetHouseWalletRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameService_ConfirmDeposit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmDepositRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).ConfirmDeposit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_ConfirmDeposit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).ConfirmDeposit(ctx, req.(*ConfirmDepositRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _GameService_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -288,6 +546,24 @@ func _GameService_CollectLoot_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameService_Attack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AttackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameServiceServer).Attack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameService_Attack_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameServiceServer).Attack(ctx, req.(*AttackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GameService_ServiceDesc is the grpc.ServiceDesc for GameService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -296,6 +572,30 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*GameServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "CreateSession",
+			Handler:    _GameService_CreateSession_Handler,
+		},
+		{
+			MethodName: "ListSessions",
+			Handler:    _GameService_ListSessions_Handler,
+		},
+		{
+			MethodName: "JoinSession",
+			Handler:    _GameService_JoinSession_Handler,
+		},
+		{
+			MethodName: "StartGame",
+			Handler:    _GameService_StartGame_Handler,
+		},
+		{
+			MethodName: "GetHouseWallet",
+			Handler:    _GameService_GetHouseWallet_Handler,
+		},
+		{
+			MethodName: "ConfirmDeposit",
+			Handler:    _GameService_ConfirmDeposit_Handler,
+		},
+		{
 			MethodName: "Move",
 			Handler:    _GameService_Move_Handler,
 		},
@@ -303,13 +603,22 @@ var GameService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "CollectLoot",
 			Handler:    _GameService_CollectLoot_Handler,
 		},
+		{
+			MethodName: "Attack",
+			Handler:    _GameService_Attack_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchLobby",
+			Handler:       _GameService_WatchLobby_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "Connect",
 			Handler:       _GameService_Connect_Handler,
 			ServerStreams: true,
 		},
 	},
-	Metadata: "server/proto/game.proto",
+	Metadata: "game.proto",
 }

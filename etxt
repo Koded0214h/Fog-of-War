@@ -1,0 +1,116 @@
+🖥️  SERVER DEPLOYMENT (Go/gRPC)                                                                                                  
+                                                                                                                                                                                
+  1. Build the binary:                                                                                                                                                          
+   
+  cd /Users/koded/Code/Fog-of-War/server                                                                                                                                        
+  go build -o server_bin ./cmd/server/main.go                                                                                                                                   
+                                                                                                                                                                                
+  2. Set environment variables (.env file):                                                                                                                                     
+                                                                                                                                                                                
+  PORT=50051                                                
+  JWT_SECRET=your-secret-key-change-me                                                                                                                                          
+  ARBITRUM_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
+  FOG_SESSION_CONTRACT=0x0000000000000000000000000000000000000000                                                                                                               
+  ARBITRUM_PRIVATE_KEY=0000000000000000000000000000000000000000000000000000000000000000                                                                                         
+  USE_MOCK_SERVICES=true                                                                                                                                                        
+  SOLANA_HOUSE_PRIVATE_KEY=your-house-wallet-key                                                                                                                                
+  SOLANA_RPC_URL=https://api.devnet.solana.com                                                                                                                                  
+                                                            
+  3. Deploy options:                                                                                                                                                            
+                                                            
+  Option A: Deploy to Railway, Render, or Heroku                                                                                                                                
+  # Push to git, connect your repo to Railway/Render/Heroku 
+  # Add environment variables in their dashboard           
+  # Set start command: ./server_bin                                                                                                                                             
+                                                                                                                                                                                
+  Option B: VPS (AWS EC2, DigitalOcean, Linode)                                                                                                                                 
+  # SSH into your VPS                                                                                                                                                           
+  scp ./server_bin user@your-server.com:/app/               
+  ssh user@your-server.com                                                                                                                                                      
+                                                            
+  # Run on VPS
+  nohup ./server_bin > server.log 2>&1 &
+                                        
+  # Use reverse proxy (nginx) to expose gRPC
+  # Enable TLS/SSL certificates                                                                                                                                                 
+   
+  Option C: Docker (any platform)                                                                                                                                               
+  FROM golang:1.21                                          
+  WORKDIR /app
+  COPY . .
+  RUN go build -o server_bin ./cmd/server/main.go
+  EXPOSE 50051
+  CMD ["./server_bin"]
+
+  ---
+  🎨 CLIENT DEPLOYMENT (React to Vercel)
+
+  1. Build the client:
+
+  cd /Users/koded/Code/Fog-of-War/fog-of-war/client
+  npm install
+  npm run build
+
+  2. Deploy to Vercel:
+
+  Option A: Command line
+  npm i -g vercel
+  vercel login
+  vercel deploy
+
+  Option B: GitHub integration
+  - Push code to GitHub
+  - Go to vercel.com
+  - Click "New Project"
+  - Select your GitHub repo
+  - Set build command: npm run build
+  - Set output directory: dist
+  - Click "Deploy"
+
+  3. Set environment variable on Vercel:
+
+  For production:
+  VITE_BACKEND_URL=https://your-server-domain.com
+
+  For development (local):
+  VITE_BACKEND_URL=http://localhost:8080
+
+  Update .env file:
+  VITE_BACKEND_URL=https://your-server-domain.com
+
+  4. Redeploy after env changes:
+
+  vercel deploy --prod
+
+  ---
+  📋 Deployment Checklist:
+
+  Server:
+
+  - Build Go binary
+  - Set all .env variables (especially JWT_SECRET, SOLANA_HOUSE_PRIVATE_KEY)
+  - Deploy to hosting (Railway, Render, VPS, Docker)
+  - Note the server URL (e.g., https://fog-server.railway.app)
+  - Enable TLS/SSL certificate
+  - Test gRPC connection
+
+  Client:
+
+  - Run npm run build locally to test
+  - Push to GitHub
+  - Deploy to Vercel
+  - Set VITE_BACKEND_URL environment variable pointing to your server
+  - Test wallet connection and gameplay
+
+  ---
+  🔗 URL Format:
+
+  Backend URL (for client .env):
+  https://your-server-domain.com
+  Example: https://fog-server.railway.app
+
+  Vercel URL (for users):
+  https://your-project.vercel.app
+  Example: https://fog-of-war.vercel.app
+
+  ---

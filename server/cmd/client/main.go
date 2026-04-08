@@ -65,7 +65,7 @@ func main() {
 	// 6. Connect to Game Stream
 	fmt.Println("\n--- Testing Game Connection ---")
 	stream, err := gameClient.Connect(authCtx, &pb.ConnectRequest{
-		GameId: gameID,
+		SessionId: gameID,
 	})
 	if err != nil {
 		log.Fatalf("could not connect to game: %v", err)
@@ -93,9 +93,9 @@ func main() {
 	time.Sleep(1 * time.Second)
 	fmt.Println("\n\n--- Testing Movement (Moving to 75, 80) ---")
 	moveRes, err := gameClient.Move(authCtx, &pb.MoveRequest{
-		GameId:  gameID,
-		TargetX: 75.5,
-		TargetY: 80.0,
+		SessionId: gameID,
+		TargetX:   75.5,
+		TargetY:   80.0,
 	})
 	if err != nil {
 		log.Fatalf("movement failed: %v", err)
@@ -110,8 +110,8 @@ func main() {
 	// In the mock engine, any loot ID is accepted
 	mockLootID := uuid.New().String()
 	lootRes, err := gameClient.CollectLoot(authCtx, &pb.CollectLootRequest{
-		GameId: gameID,
-		LootId: mockLootID,
+		SessionId: gameID,
+		LootId:    mockLootID,
 	})
 	if err != nil {
 		fmt.Printf("Loot collection request failed: %v\n", err)

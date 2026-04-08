@@ -80,19 +80,24 @@ func NewArbitrumService() (*ArbitrumService, error) {
 		return &ArbitrumService{IsMock: true}, nil
 	}
 
-	rpcURL := os.Getenv("ARBITRUM_RPC_URL")
-	if rpcURL == "" {
-		rpcURL = "https://sepolia-rollup.arbitrum.io/rpc"
+	// If Arbitrum key is missing or all-zeros, silently fall back to mock.
+	// We use Solana for escrow, so Arbitrum is optional.
+	privateKeyHex := strings.TrimPrefix(os.Getenv("ARBITRUM_PRIVATE_KEY"), "0x")
+	isZeroKey := privateKeyHex == "" || privateKeyHex == strings.Repeat("0", 64)
+	if isZeroKey {
+		fmt.Println("Arbitrum: no valid key set — running in mock mode")
+		return &ArbitrumService{IsMock: true}, nil
 	}
 
 	contractAddr := os.Getenv("FOG_SESSION_CONTRACT")
 	if contractAddr == "" {
-		return nil, fmt.Errorf("FOG_SESSION_CONTRACT env var not set")
+		fmt.Println("Arbitrum: FOG_SESSION_CONTRACT not set — running in mock mode")
+		return &ArbitrumService{IsMock: true}, nil
 	}
 
-	privateKeyHex := os.Getenv("ARBITRUM_PRIVATE_KEY")
-	if privateKeyHex == "" {
-		return nil, fmt.Errorf("ARBITRUM_PRIVATE_KEY env var not set")
+	rpcURL := os.Getenv("ARBITRUM_RPC_URL")
+	if rpcURL == "" {
+		rpcURL = "https://sepolia-rollup.arbitrum.io/rpc"
 	}
 
 	// Strip 0x prefix if present

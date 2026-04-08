@@ -1,0 +1,17 @@
+Dear Claude,
+
+Tasks for Fog of War are getting on my neck, the deadline is soon, and i need you to cook:
+*   Escrow logic for devnet an dgame stakes
+*   Time and money output for the game sessions
+*   Lock down, no reload during game sessions until it is over(time end or died)
+*   Timer on the gameSession (not solo mode)
+*   Attack and basic game mechanism..
+*   Add a field to spawn bots unto the map too.
+
+All these work on the solo mode, i want it to work perfectly on the main mode, also it should have somehting that prompts the user/player to move when spawned on the map..!!!! 
+
+I want you to check teh blockchain and also the backend(server) an dfrontend in fog-of-war. please i have soon to complete all these changes
+
+
+
+solana airdrop 2 HWsvbnEmhR1mHMhsYVatFNa2VeRtg2d6FL2RUDKDt6jL --url devnet   

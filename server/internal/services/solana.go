@@ -4,16 +4,20 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/programs/system"
 	"github.com/gagliardetto/solana-go/rpc"
 )
 
+const lamportsPerSOL = 1_000_000_000
+
 type SolanaService struct {
-	RPCClient      *rpc.Client
-	PrivateKey     solana.PrivateKey
-	SanctumPool    solana.PublicKey
-	IsMock         bool
+	RPCClient   *rpc.Client
+	HouseKey    solana.PrivateKey   // server-controlled wallet — holds the prize pool
+	HousePubkey solana.PublicKey
+	IsMock      bool
 }
 
 func NewSolanaService() *SolanaService {
@@ -23,58 +27,179 @@ func NewSolanaService() *SolanaService {
 	}
 
 	isMock := os.Getenv("USE_MOCK_SERVICES") != "false"
-	
+
 	s := &SolanaService{
 		RPCClient: rpc.New(rpcURL),
 		IsMock:    isMock,
 	}
 
-	// In production, load private key and pool address from environment
+	// Load house wallet private key (base58-encoded)
+	pkBase58 := os.Getenv("SOLANA_HOUSE_PRIVATE_KEY")
+	if pkBase58 != "" {
+		pk, err := solana.PrivateKeyFromBase58(pkBase58)
+		if err == nil {
+			s.HouseKey    = pk
+			s.HousePubkey = pk.PublicKey()
+			fmt.Printf("Solana house wallet: %s\n", s.HousePubkey.String())
+		} else {
+			fmt.Printf("Warning: SOLANA_HOUSE_PRIVATE_KEY invalid: %v\n", err)
+		}
+	} else if !isMock {
+		fmt.Println("Warning: SOLANA_HOUSE_PRIVATE_KEY not set — running in mock mode")
+		s.IsMock = true
+	}
+
 	return s
 }
 
-func (s *SolanaService) VerifyTransaction(ctx context.Context, txHash string, expectedAmount float64) (bool, error) {
+// HouseWalletAddress returns the public key of the house wallet.
+func (s *SolanaService) HouseWalletAddress() string {
 	if s.IsMock {
-		fmt.Printf("Mock Solana: Verifying transaction %s for %f SOL\n", txHash, expectedAmount)
-		return true, nil
+		return "MOCK_HOUSE_WALLET_ADDRESS"
+	}
+	return s.HousePubkey.String()
+}
+
+// VerifyDeposit checks that a Solana transaction on devnet:
+//   - is confirmed
+//   - transferred at least `requiredLamports` to the house wallet
+//
+// Returns the actual amount transferred in lamports.
+func (s *SolanaService) VerifyDeposit(ctx context.Context, txSig string, requiredSOL float64) (bool, uint64, error) {
+	if s.IsMock {
+		lamports := uint64(requiredSOL * lamportsPerSOL)
+		fmt.Printf("Mock Solana: VerifyDeposit sig=%s required=%.4f SOL → OK\n", txSig, requiredSOL)
+		return true, lamports, nil
 	}
 
-	sig, err := solana.SignatureFromBase58(txHash)
+	sig, err := solana.SignatureFromBase58(txSig)
 	if err != nil {
-		return false, err
+		return false, 0, fmt.Errorf("invalid signature: %w", err)
 	}
 
-	out, err := s.RPCClient.GetTransaction(
-		ctx,
-		sig,
-		&rpc.GetTransactionOpts{
-			Encoding: solana.EncodingBase64,
+	// Poll up to 30 seconds for confirmation
+	deadline := time.Now().Add(30 * time.Second)
+	var tx *rpc.GetTransactionResult
+	for time.Now().Before(deadline) {
+		tx, err = s.RPCClient.GetTransaction(ctx, sig, &rpc.GetTransactionOpts{
+			Encoding:   solana.EncodingBase64,
+			Commitment: rpc.CommitmentConfirmed,
+		})
+		if err == nil && tx != nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	if tx == nil {
+		return false, 0, fmt.Errorf("transaction not found after 30s: %s", txSig)
+	}
+	if tx.Meta == nil || tx.Meta.Err != nil {
+		return false, 0, fmt.Errorf("transaction failed on-chain: %v", tx.Meta.Err)
+	}
+
+	// Check post-balance of house wallet increased by at least requiredLamports
+	requiredLamports := uint64(requiredSOL * lamportsPerSOL)
+
+	// Decode account keys to find house wallet index
+	parsed, err := tx.Transaction.GetTransaction()
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to parse transaction: %w", err)
+	}
+
+	houseIdx := -1
+	for i, key := range parsed.Message.AccountKeys {
+		if key.Equals(s.HousePubkey) {
+			houseIdx = i
+			break
+		}
+	}
+	if houseIdx < 0 {
+		return false, 0, fmt.Errorf("house wallet not found in transaction accounts")
+	}
+
+	if houseIdx >= len(tx.Meta.PostBalances) || houseIdx >= len(tx.Meta.PreBalances) {
+		return false, 0, fmt.Errorf("balance index out of range")
+	}
+
+	received := tx.Meta.PostBalances[houseIdx] - tx.Meta.PreBalances[houseIdx]
+	if received < requiredLamports {
+		return false, received, fmt.Errorf(
+			"insufficient deposit: got %d lamports, need %d",
+			received, requiredLamports,
+		)
+	}
+
+	return true, received, nil
+}
+
+// SendPayout sends `amountSOL` from the house wallet to `recipientPubkey`.
+// Returns the transaction signature.
+func (s *SolanaService) SendPayout(ctx context.Context, recipientPubkeyStr string, amountSOL float64) (string, error) {
+	if s.IsMock {
+		fmt.Printf("Mock Solana: SendPayout → %s %.4f SOL\n", recipientPubkeyStr, amountSOL)
+		return fmt.Sprintf("mock_payout_tx_%s", recipientPubkeyStr[:8]), nil
+	}
+
+	if s.HouseKey == nil {
+		return "", fmt.Errorf("house wallet not configured")
+	}
+
+	recipient, err := solana.PublicKeyFromBase58(recipientPubkeyStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid recipient pubkey: %w", err)
+	}
+
+	lamports := uint64(amountSOL * lamportsPerSOL)
+
+	// Get recent blockhash
+	recent, err := s.RPCClient.GetLatestBlockhash(ctx, rpc.CommitmentFinalized)
+	if err != nil {
+		return "", fmt.Errorf("get blockhash failed: %w", err)
+	}
+
+	// Build transfer transaction
+	tx, err := solana.NewTransaction(
+		[]solana.Instruction{
+			system.NewTransferInstruction(
+				lamports,
+				s.HousePubkey,
+				recipient,
+			).Build(),
 		},
+		recent.Value.Blockhash,
+		solana.TransactionPayer(s.HousePubkey),
 	)
 	if err != nil {
-		return false, err
+		return "", fmt.Errorf("build tx failed: %w", err)
 	}
 
-	if out == nil || out.Meta == nil {
-		return false, fmt.Errorf("transaction not found")
+	// Sign with house key
+	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
+		if key.Equals(s.HousePubkey) {
+			return &s.HouseKey
+		}
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("sign tx failed: %w", err)
 	}
 
-	return out.Meta.Err == nil, nil
+	sig, err := s.RPCClient.SendTransactionWithOpts(ctx, tx, rpc.TransactionOpts{
+		SkipPreflight: false,
+	})
+	if err != nil {
+		return "", fmt.Errorf("send tx failed: %w", err)
+	}
+
+	fmt.Printf("Solana payout sent: %s → %s (%.4f SOL)\n", sig.String(), recipientPubkeyStr, amountSOL)
+	return sig.String(), nil
 }
 
-func (s *SolanaService) SendPayout(ctx context.Context, recipient string, amount float64) (string, error) {
-	if s.IsMock {
-		return fmt.Sprintf("mock_payout_tx_%s", recipient), nil
-	}
-
-	// In production, implement actual transaction signing and sending
-	// This would involve creating a Transfer instruction and signing it with s.PrivateKey
-	return "tx_hash", nil
-}
-
+// GetBalance returns the SOL balance of a wallet on devnet.
 func (s *SolanaService) GetBalance(ctx context.Context, publicKey string) (float64, error) {
 	if s.IsMock {
-		return 1.0, nil
+		return 5.0, nil
 	}
 
 	pub, err := solana.PublicKeyFromBase58(publicKey)
@@ -87,5 +212,26 @@ func (s *SolanaService) GetBalance(ctx context.Context, publicKey string) (float
 		return 0, err
 	}
 
-	return float64(out.Value) / 1e9, nil
+	return float64(out.Value) / lamportsPerSOL, nil
+}
+
+// AirdropIfLow requests a devnet airdrop to the house wallet when balance is low.
+// Only useful on devnet — safe to call at startup.
+func (s *SolanaService) AirdropIfLow(ctx context.Context) {
+	if s.IsMock || s.HouseKey == nil {
+		return
+	}
+
+	bal, err := s.GetBalance(ctx, s.HousePubkey.String())
+	if err != nil || bal >= 1.0 {
+		return
+	}
+
+	fmt.Printf("House wallet balance low (%.4f SOL) — requesting devnet airdrop\n", bal)
+	sig, err := s.RPCClient.RequestAirdrop(ctx, s.HousePubkey, 2*lamportsPerSOL, rpc.CommitmentFinalized)
+	if err != nil {
+		fmt.Printf("Airdrop failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Airdrop requested: %s\n", sig.String())
 }
