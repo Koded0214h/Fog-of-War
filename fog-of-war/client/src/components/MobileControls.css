@@ -1,0 +1,96 @@
+.mobile-controls {
+  position: fixed;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 24px;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.dpad {
+  display: grid;
+  grid-template-rows: repeat(3, 56px);
+  grid-template-columns: 56px;
+  gap: 2px;
+  pointer-events: all;
+}
+
+.dpad__row {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+}
+
+.dpad__row--middle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.dpad__btn {
+  width: 56px;
+  height: 56px;
+  background: rgba(255, 107, 0, 0.25);
+  border: 1px solid rgba(255, 107, 0, 0.6);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: background 0.1s, box-shadow 0.1s;
+  box-shadow: 0 0 0 0 rgba(255, 107, 0, 0);
+}
+
+.dpad__btn:active {
+  background: rgba(255, 107, 0, 0.55);
+  box-shadow: 0 0 8px rgba(255, 107, 0, 0.6);
+}
+
+.dpad__center {
+  width: 56px;
+  height: 56px;
+  background: rgba(5, 5, 8, 0.8);
+  border-radius: 6px;
+}
+
+.atk-btn {
+  width: 80px;
+  height: 80px;
+  background: rgba(255, 30, 30, 0.35);
+  border: 2px solid rgba(255, 60, 60, 0.8);
+  border-radius: 50%;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 2px;
+  font-weight: bold;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  pointer-events: all;
+  transition: background 0.1s, box-shadow 0.1s;
+  box-shadow: 0 0 0 0 rgba(255, 30, 30, 0);
+}
+
+.atk-btn:active {
+  background: rgba(255, 30, 30, 0.65);
+  box-shadow: 0 0 12px rgba(255, 30, 30, 0.8);
+}
+
+/* Hide on desktop */
+@media (min-width: 768px) {
+  .mobile-controls {
+    display: none;
+  }
+}
