@@ -270,3 +270,8 @@ Current Plan
      8. Network game → multiplayer sprites render, sync correctly from gRPC state
 
      "/plan open" to edit this plan in Vim
+
+
+     claude --resume faca11cb-8e14-402a-8cea-c9d8d1280f0c
+
+      /plugin install frontend-design@claude-plugins-official

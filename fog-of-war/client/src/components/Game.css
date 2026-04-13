@@ -3,25 +3,19 @@
   height: 100vh;
   overflow: hidden;
   background: var(--bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
 }
 
-.game__canvas-wrap {
-  margin-top: 52px;
-  overflow: hidden;
-  border: 2px solid rgba(255, 107, 0, 0.8);
-  box-shadow:
-    0 0 0 1px rgba(255, 60, 0, 0.3),
-    0 0 24px 4px rgba(255, 107, 0, 0.5),
-    0 0 60px 12px rgba(255, 107, 0, 0.2),
-    inset 0 0 20px rgba(255, 107, 0, 0.1);
-  width: max-content;
-  height: max-content;
+/* Phaser injects its <canvas> into this div */
+.game__phaser {
+  position: absolute;
+  inset: 52px 0 0 0;   /* leave room for HUD bar at top */
+  width: 100%;
+  height: calc(100vh - 52px);
 }
 
-.game__canvas {
+/* Phaser canvas itself */
+.game__phaser canvas {
   display: block;
   image-rendering: pixelated;
 }

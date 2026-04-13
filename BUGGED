@@ -1,0 +1,20 @@
+                                                                                                                                                                                                                   
+  Camera follow (startFollow removed)                                                                                                                                                                                 
+  startFollow with lerp=0.08 and RESIZE scale mode was computing scrollX = playerX - camera.halfWidth without dividing by zoom — so on a 2× zoom screen it was targeting 1032 - 195 = 837 instead of 1032 - 97 = 935, 
+  and then the camera bounds were clamping it further to 36. Replaced with a manual lerp in update() using the correct formula: targetX = playerX - cameraWidth / (2 × zoom). Camera now properly centers and follows 
+  every frame.                                                                                                                                                                                                        
+                                                                                                                                                                                                                      
+  Particle crash (this.scene null/destroyed)                
+  React StrictMode mounts + immediately unmounts effects to detect side effects. The first Phaser game gets destroy(true) called, which sets scene.sys to null. But if a window event (fog:loot_pickup) fires before
+  cleanup removes the listener, the stale ParticleSystem tries to call this.scene.add.particles on a dead scene. Added _ok() guard that checks scene.sys.isActive() before every particle operation.                  
+  
+✻ Crunched for 6m 46s                                                                                                                                                                                                 
+                                                            
+❯ now the problem is i cant move, teh camera and teh player is thrown to teh top left and all that stuff, wo omorr... just get this thing right ONCE!!!                                                               
+                                                                                                                                                        
+⏺ Let me stop guessing and read the exact current state of update() and create():                                                                                                                                     
+                                                     
+  Read 1 file (ctrl+o to expand)    
+  ⎿  Context limit reached · /compact or /clear to continue                                                                                                                                                           
+Resume this session with:                                                                                                                                                                                             
+claude --resume faca11cb-8e14-402a-8cea-c9d8d1280f0c  
