@@ -35,18 +35,31 @@ func NewSolanaService() *SolanaService {
 
 	// Load house wallet private key (base58-encoded)
 	pkBase58 := os.Getenv("SOLANA_HOUSE_PRIVATE_KEY")
-	if pkBase58 != "" {
+	if pkBase58 == "" {
+		// Fallback: try reading from a local JSON file (common for Solana CLI wallets)
+		data, err := os.ReadFile("house-wallet.json")
+		if err == nil {
+			// Try to parse the byte array format [1,2,3...]
+			key, err := solana.PrivateKeyFromSolanaKeygen(string(data))
+			if err == nil {
+				s.HouseKey = key
+				s.HousePubkey = key.PublicKey()
+				s.IsMock = false
+			}
+		}
+	} else {
 		pk, err := solana.PrivateKeyFromBase58(pkBase58)
 		if err == nil {
 			s.HouseKey    = pk
 			s.HousePubkey = pk.PublicKey()
-			fmt.Printf("Solana house wallet: %s\n", s.HousePubkey.String())
-		} else {
-			fmt.Printf("Warning: SOLANA_HOUSE_PRIVATE_KEY invalid: %v\n", err)
+			s.IsMock      = false
 		}
+	}
+
+	if s.HouseKey != nil {
+		fmt.Printf("SOLANA PRODUCTION MODE: House wallet = %s\n", s.HousePubkey.String())
 	} else if !isMock {
-		fmt.Println("Warning: SOLANA_HOUSE_PRIVATE_KEY not set — running in mock mode")
-		s.IsMock = true
+		fmt.Println("CRITICAL ERROR: USE_MOCK_SERVICES is false but no house key found!")
 	}
 
 	return s

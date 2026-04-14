@@ -103,6 +103,8 @@ export default function Landing() {
       await ensureAuth();
       const res = await createSession(maxPlayers, entryFee, duration, botCount);
       if (res.error) throw new Error(res.error);
+      
+      store.setLocalMode(false);
       store.setSessionId(res.session_id);
       store.setIsHost(true);
       store.setMyId(localStorage.getItem('fog_player_id'));
@@ -180,6 +182,7 @@ export default function Landing() {
         if (!res.success) throw new Error(res.error || 'Join failed');
       }
 
+      store.setLocalMode(false);
       store.setSessionId(sessionId);
       store.setIsHost(false);
       store.setMyId(localStorage.getItem('fog_player_id'));

@@ -226,8 +226,7 @@ func (s *GameServer) Connect(req *pb.ConnectRequest, stream pb.GameService_Conne
 			for _, ev := range update.Events {
 				if ev.EventType == "game_over" && ev.PlayerId != "" {
 					winnerID := ev.PlayerId
-					// Only one connection should trigger payout (the winner's or any connection once)
-					if walletPubkey != "" && playerID.String() == winnerID {
+					if playerID.String() == winnerID {
 						go s.Manager.PayoutWinner(
 							context.Background(),
 							sessionID,
