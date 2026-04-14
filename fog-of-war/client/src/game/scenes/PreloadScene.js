@@ -77,6 +77,17 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image('pfx_fog',     `${KENNEY}circle_05.png`);
     this.load.image('pfx_circle',  `${KENNEY}circle_01.png`);
 
+    // ── Sound FX ───────────────────────────────────────────────────────
+    const SOUNDS = '/assets/sounds/';
+    const RPG = `${SOUNDS}kenney_rpg-audio/Audio/`;
+    
+    this.load.audio('sfx_click',  `${RPG}metalClick.ogg`);
+    this.load.audio('sfx_move',   `${RPG}footstep00.ogg`);
+    this.load.audio('sfx_loot',   `${RPG}handleCoins.ogg`);
+    this.load.audio('sfx_hit',    `${RPG}knifeSlice.ogg`);
+    this.load.audio('sfx_kill',   `${RPG}chop.ogg`);
+    this.load.audio('bgm_ambient', `${SOUNDS}YuraSoop - Dark Ambient.mp3`);
+
     // Suppress 404s for missing hit frames (not every char has one)
     this.load.on('loaderror', (file) => {
       if (file.key.includes('_hit_f')) {

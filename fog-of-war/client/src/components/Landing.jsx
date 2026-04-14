@@ -19,6 +19,12 @@ const CHAR_NAMES = [
 ];
 const SPRITE_BASE = '/assets/0x72_DungeonTilesetII_v1.7/frames/';
 
+const playClick = () => {
+  const audio = new Audio('/assets/sounds/kenney_rpg-audio/Audio/metalClick.ogg');
+  audio.volume = 0.3;
+  audio.play().catch(() => {});
+};
+
 export default function Landing() {
   const wallet = useWallet();
   const { publicKey, connected } = wallet;
@@ -212,17 +218,17 @@ export default function Landing() {
             <WalletSelector />
             {connected && (
               <div className="landing__game-btns">
-                <button className="enter-btn" onClick={() => setMode('host')} disabled={busy}>
+                <button className="enter-btn" onClick={() => { playClick(); setMode('host'); }} disabled={busy}>
                   <span className="enter-btn__icon">⚔</span>
                   HOST GAME
                 </button>
-                <button className="enter-btn enter-btn--secondary" onClick={handleBrowse} disabled={busy}>
+                <button className="enter-btn enter-btn--secondary" onClick={() => { playClick(); handleBrowse(); }} disabled={busy}>
                   <span className="enter-btn__icon">◎</span>
                   {busy ? 'LOADING...' : 'JOIN GAME'}
                 </button>
               </div>
             )}
-            <button className="solo-btn" onClick={handleSoloPlay}>
+            <button className="solo-btn" onClick={() => { playClick(); handleSoloPlay(); }}>
               PLAY SOLO (NO WALLET)
             </button>
 
@@ -234,7 +240,7 @@ export default function Landing() {
                   <button
                     key={i}
                     className={`char-btn ${store.selectedCharacter === i ? 'char-btn--selected' : ''}`}
-                    onClick={() => store.setSelectedCharacter(i)}
+                    onClick={() => { playClick(); store.setSelectedCharacter(i); }}
                     title={name.replace('_', ' ')}
                   >
                     <img 

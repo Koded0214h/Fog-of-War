@@ -130,11 +130,15 @@ export default class GameScene extends Phaser.Scene {
 
     // Listen for combat flash events from React
     this._onCombatFlash = () => {
-      if (this._mySprite) this.particles.flashSprite(this._mySprite);
+      if (this._mySprite) {
+        this.particles.flashSprite(this._mySprite);
+        this.sound.play('sfx_hit', { volume: 0.3 });
+      }
     };
     this._onLootPickup = (e) => {
       const { x, y } = e.detail;
       this.particles.lootPickup(x, y);
+      this.sound.play('sfx_loot', { volume: 0.4 });
     };
     window.addEventListener('fog:combat_flash', this._onCombatFlash);
     window.addEventListener('fog:loot_pickup', this._onLootPickup);
@@ -144,6 +148,10 @@ export default class GameScene extends Phaser.Scene {
     this._syncPlayers(s.players);
     this._syncNPCs(s.npcs);
     this._syncTreasures(s.treasures);
+
+    // ── Sounds ────────────────────────────────────────────────────────
+    this.sound.play('bgm_ambient', { loop: true, volume: 0.25 });
+    this._lastMoveSoundTime = 0;
 
     // Handle window resize
     this.scale.on('resize', (gameSize) => {
@@ -178,6 +186,12 @@ export default class GameScene extends Phaser.Scene {
       if (dist > ANIM_THRESHOLD) {
         this._mySprite.play(`${charIdx}_run`, true);
         if (dx !== 0) this._mySprite.setFlipX(dx < 0);
+
+        // Play footstep sound periodically (throttled)
+        if (time > this._lastMoveSoundTime + 320) {
+          this.sound.play('sfx_move', { volume: 0.15 });
+          this._lastMoveSoundTime = time;
+        }
       } else {
         this._mySprite.play(`${charIdx}_idle`, true);
       }
