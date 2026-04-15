@@ -108,6 +108,13 @@ func (s *GameServer) CreateSession(ctx context.Context, req *pb.CreateSessionReq
 		return nil, status.Errorf(codes.Internal, "create session failed: %v", err)
 	}
 
+	// Store host's wallet pubkey so PayoutWinner can find it if the host wins
+	if walletPubkey := walletFromCtx(ctx); walletPubkey != "" {
+		meta.Mu.Lock()
+		meta.PlayerWallets[playerID] = walletPubkey
+		meta.Mu.Unlock()
+	}
+
 	return &pb.CreateSessionResponse{SessionId: meta.ID.String()}, nil
 }
 

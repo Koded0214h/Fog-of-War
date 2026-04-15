@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: fog-of-war-server
+    runtime: go
+    rootDir: server
+    buildCommand: go build -o server_bin ./cmd/server/main.go
+    startCommand: ./server_bin
+    healthCheckPath: /health
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true          # Render auto-generates a secure random value
+      - key: SOLANA_RPC_URL
+        value: https://api.devnet.solana.com
+      - key: USE_MOCK_SERVICES
+        value: "true"                # set to "false" once house wallet is funded on devnet
+      - key: SOLANA_HOUSE_PRIVATE_KEY
+        sync: false                  # set manually in Render dashboard — never commit this
+      - key: ALLOWED_ORIGINS
+        value: https://fog-of-war.vercel.app  # update to your actual Vercel URL

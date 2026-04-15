@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,7 +57,13 @@ func main() {
 	}()
 
 	// 5. Start gRPC-Web Listener
+	// Render (and most PaaS) injects PORT — fall back to 8080 for local dev
 	webPort := 8080
+	if portStr := os.Getenv("PORT"); portStr != "" {
+		if p, err := strconv.Atoi(portStr); err == nil {
+			webPort = p
+		}
+	}
 	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
 		allowedOrigins = "*"

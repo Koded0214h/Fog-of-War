@@ -307,7 +307,7 @@ func (m *GameManager) PayoutWinner(ctx context.Context, sessionID uuid.UUID, win
 		s.Mu.RUnlock()
 		return
 	}
-	entryFee := s.EntryFee
+	entryFee  := s.EntryFee
 	paidCount := len(s.PaidPlayers)
 	// If winnerPubkey is not provided, try to find it in our stored wallets
 	if winnerPubkey == "" {
@@ -315,7 +315,7 @@ func (m *GameManager) PayoutWinner(ctx context.Context, sessionID uuid.UUID, win
 	}
 	s.Mu.RUnlock()
 
-	prizePool := float64(paidCount) * entryFee * 0.9 // 90% to winner
+	prizePool := float64(paidCount) * entryFee * 0.9 // 90% to winner, 10% stays in house
 
 	if winnerPubkey == "" {
 		fmt.Printf("Skipping payout: no wallet address for winner %s in session %s\n", winnerPlayerID, sessionID)

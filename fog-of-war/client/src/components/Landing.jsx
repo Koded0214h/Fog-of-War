@@ -13,6 +13,8 @@ import WalletSelector from './WalletSelector';
 import WalletDebug from './WalletDebug';
 import './Landing.css';
 
+const DEVNET_RPC = 'https://api.devnet.solana.com';
+
 const CHAR_NAMES = [
   'knight_m', 'elf_m', 'lizard_m', 'wizzard_m',
   'dwarf_m', 'orc_warrior', 'knight_f', 'elf_f',
@@ -101,9 +103,33 @@ export default function Landing() {
     setBusy(true); setError('');
     try {
       await ensureAuth();
+
+      // 1. Create the session first to get a sessionId
       const res = await createSession(maxPlayers, entryFee, duration, botCount);
       if (res.error) throw new Error(res.error);
-      
+
+      // 2. If there's an entry fee, host pays it too (same as joining)
+      if (entryFee > 0) {
+        const houseWallet = await getHouseWallet();
+        const isMock = !houseWallet || houseWallet === 'MOCK_HOUSE_WALLET_ADDRESS';
+
+        if (!isMock) {
+          const conn = new Connection(DEVNET_RPC, 'confirmed');
+          const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
+          const tx = new Transaction({ recentBlockhash: blockhash, feePayer: publicKey });
+          tx.add(SystemProgram.transfer({
+            fromPubkey: publicKey,
+            toPubkey:   new PublicKey(houseWallet),
+            lamports:   Math.round(entryFee * LAMPORTS_PER_SOL),
+          }));
+          const txSig = await wallet.sendTransaction(tx, conn);
+          await conn.confirmTransaction({ signature: txSig, blockhash, lastValidBlockHeight }, 'confirmed');
+          const depositRes = await confirmDeposit(res.session_id, txSig);
+          if (!depositRes.success) throw new Error(depositRes.error || 'Host deposit failed');
+        }
+        // mock mode: skip on-chain payment — host is already in session from CreateSession
+      }
+
       store.setLocalMode(false);
       store.setSessionId(res.session_id);
       store.setIsHost(true);
