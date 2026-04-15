@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { 
+import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
   TorusWalletAdapter,
@@ -10,6 +10,7 @@ import { clusterApiUrl } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 import { useGameStore } from './store';
+import { prefetchAssets } from './game/prefetchAssets';
 import Landing from './components/Landing';
 import Lobby from './components/Lobby';
 import Game from './components/Game';
@@ -17,7 +18,6 @@ import Results from './components/Results';
 
 function Router() {
   const screen = useGameStore((s) => s.screen);
-  console.log('Router rendering, current screen:', screen);
   if (screen === 'lobby')   return <Lobby />;
   if (screen === 'game')    return <Game />;
   if (screen === 'results') return <Results />;
@@ -25,6 +25,11 @@ function Router() {
 }
 
 export default function App() {
+  // Warm the browser HTTP cache the moment the app first mounts, while the
+  // user is still on the Landing screen.  By the time they hit Play the
+  // assets are already cached and Phaser's loading bar is nearly instant.
+  useEffect(() => { prefetchAssets(); }, []);
+
   const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
   
   const wallets = useMemo(
