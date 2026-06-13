@@ -86,13 +86,14 @@ message CreateSessionResponse {
 }
 
 message SessionInfo {
-  string session_id       = 1;
-  string host_id          = 2;
-  uint32 max_players      = 3;
-  uint32 current_players  = 4;
-  float  entry_fee        = 5;
-  uint32 duration_seconds = 6;
-  string status           = 7;   // "waiting" | "in_progress" | "ended"
+  string session_id         = 1;
+  string host_id            = 2;
+  uint32 max_players        = 3;
+  uint32 current_players    = 4;
+  float  entry_fee          = 5;
+  uint32 duration_seconds   = 6;
+  string status             = 7;   // "waiting" | "in_progress" | "ended"
+  uint64 onchain_session_id = 8;   // Arbitrum on-chain session ID (0 if not linked)
 }
 
 message ListSessionsRequest {}

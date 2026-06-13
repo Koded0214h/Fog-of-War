@@ -74,16 +74,12 @@ export default class GameScene extends Phaser.Scene {
     this._createMySprite(state);
 
     this.cameras.main.setZoom(this._getZoom());
-    
-    // Explicitly center the camera on the player's initial position.
-    this.cameras.main.centerOn(this._myDisplayPos.x, this._myDisplayPos.y);
-    
-    // Start following the player sprite with smooth lerp (0.1, 0.1).
+
+    // Don't center yet — myPos is null until the first server tick arrives.
+    // The subscribe handler snaps sprite + camera together when isFirstPos fires.
     if (this._mySprite) {
       this.cameras.main.startFollow(this._mySprite, true, 0.1, 0.1);
     }
-    
-    this._cameraSnapped = false;
 
     // Map border (drawn over fog so always visible)
     this._drawBorder();
@@ -106,14 +102,17 @@ export default class GameScene extends Phaser.Scene {
           this._myTilePos = { x: state.myPos.x, y: state.myPos.y };
           this._addFootprint(state.myPos.x, state.myPos.y);
 
-          // On first valid position, snap display pos immediately so the camera 
-          // doesn't lerp from the map center (SPAWN_X/Y).
           if (isFirstPos) {
-            this._myDisplayPos = {
-              x: (state.myPos.x + 0.5) * TILE,
-              y: (state.myPos.y + 0.5) * TILE,
-            };
-            this._cameraSnapped = false; // Re-snap on next update frame
+            // Snap display pos, sprite, and camera together right now.
+            // Deferring to update() doesn't work: startFollow lerps toward the
+            // sprite's Phaser position, which is still at the placeholder tile,
+            // so centerOn in update() gets overridden by the follow lerp.
+            const wx = (state.myPos.x + 0.5) * TILE;
+            const wy = (state.myPos.y + 0.5) * TILE;
+            this._myDisplayPos = { x: wx, y: wy };
+            if (this._mySprite) this._mySprite.setPosition(wx, wy);
+            this.cameras.main.centerOn(wx, wy);
+            this._cameraSnapped = true;
           }
         }
 
@@ -257,17 +256,28 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
-    // ── Camera smooth-follow ─────────────────────────────────────────────
-    {
-      const cam = this.cameras.main;
-      if (!this._cameraSnapped && cam.width > 0) {
-        cam.centerOn(this._myDisplayPos.x, this._myDisplayPos.y);
-        this._cameraSnapped = true;
+    // ── Blood Hunt beacon ─────────────────────────────────────────────
+    let bloodHuntRevealX, bloodHuntRevealY;
+    if (state.bloodHuntActive && state.bloodHuntTarget) {
+      const targetPlayer = (state.players || {})[state.bloodHuntTarget];
+      if (targetPlayer?.pos) {
+        bloodHuntRevealX = targetPlayer.pos.x;
+        bloodHuntRevealY = targetPlayer.pos.y;
+      } else if (state.bloodHuntTarget === this._myId && state.myPos) {
+        bloodHuntRevealX = state.myPos.x;
+        bloodHuntRevealY = state.myPos.y;
       }
+      this._drawBloodHuntBeacon(state, time);
+    } else if (this._bloodHuntGfx) {
+      this._bloodHuntGfx.setVisible(false);
+      // Also hide the treasure badge — was only hidden on scene shutdown before
+      if (this._bloodHuntText) this._bloodHuntText.setVisible(false);
     }
 
     // ── Fog update ────────────────────────────────────────────────────
-    this.fog.update(this._myTilePos.x, this._myTilePos.y);
+    // Pass Blood Hunt reveal position so fog is punched through around the
+    // target. When undefined (Blood Hunt inactive), fog re-covers naturally.
+    this.fog.update(this._myTilePos.x, this._myTilePos.y, bloodHuntRevealX, bloodHuntRevealY);
 
     // ── Lighting flicker ──────────────────────────────────────────────
     this.lighting.update(delta);
@@ -287,13 +297,6 @@ export default class GameScene extends Phaser.Scene {
       fp.sprite.setAlpha(alpha);
       return true;
     });
-
-    // ── Blood Hunt beacon ─────────────────────────────────────────────
-    if (state.bloodHuntActive && state.bloodHuntTarget) {
-      this._drawBloodHuntBeacon(state, time);
-    } else if (this._bloodHuntGfx) {
-      this._bloodHuntGfx.setVisible(false);
-    }
 
     // ── Chest bob ─────────────────────────────────────────────────────
     const bob = Math.sin(time * 0.004) * 0.8;
@@ -327,8 +330,17 @@ export default class GameScene extends Phaser.Scene {
       if (rooms.length >= 30) break;
     }
 
-    // Guarantee spawn room
-    rooms.unshift({ x: SPAWN_X - 4, y: SPAWN_Y - 4, w: 9, h: 9 });
+    // Guarantee a floor room at EVERY server spawn corner so the client
+    // never needs BFS correction and server/client positions always agree.
+    // Corners mirror engine.go's playerSpawnPositions and SpawnNPCs range.
+    const spawnCorners = [
+      [64, 64],   // center (SPAWN_X/Y)
+      [20, 20], [108, 20], [20, 108], [108, 108],
+      [64, 10], [64, 118], [10, 64], [118, 64],
+    ];
+    for (const [cx, cy] of spawnCorners) {
+      rooms.unshift({ x: cx - 3, y: cy - 3, w: 7, h: 7 });
+    }
 
     // Carve each room
     rooms.forEach(({ x, y, w, h }) => {

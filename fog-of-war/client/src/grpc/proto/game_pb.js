@@ -2372,7 +2372,8 @@ proto.game.SessionInfo.toObject = function(includeInstance, msg) {
     currentPlayers: jspb.Message.getFieldWithDefault(msg, 4, 0),
     entryFee: jspb.Message.getFloatingPointFieldWithDefault(msg, 5, 0.0),
     durationSeconds: jspb.Message.getFieldWithDefault(msg, 6, 0),
-    status: jspb.Message.getFieldWithDefault(msg, 7, "")
+    status: jspb.Message.getFieldWithDefault(msg, 7, ""),
+    onchainSessionId: jspb.Message.getFieldWithDefault(msg, 8, 0)
   };
 
   if (includeInstance) {
@@ -2436,6 +2437,10 @@ proto.game.SessionInfo.deserializeBinaryFromReader = function(msg, reader) {
     case 7:
       var value = /** @type {string} */ (reader.readString());
       msg.setStatus(value);
+      break;
+    case 8:
+      var value = /** @type {number} */ (reader.readUint64());
+      msg.setOnchainSessionId(value);
       break;
     default:
       reader.skipField();
@@ -2512,6 +2517,13 @@ proto.game.SessionInfo.serializeBinaryToWriter = function(message, writer) {
   if (f.length > 0) {
     writer.writeString(
       7,
+      f
+    );
+  }
+  f = message.getOnchainSessionId();
+  if (f !== 0) {
+    writer.writeUint64(
+      8,
       f
     );
   }
@@ -2641,6 +2653,24 @@ proto.game.SessionInfo.prototype.getStatus = function() {
  */
 proto.game.SessionInfo.prototype.setStatus = function(value) {
   return jspb.Message.setProto3StringField(this, 7, value);
+};
+
+
+/**
+ * optional uint64 onchain_session_id = 8;
+ * @return {number}
+ */
+proto.game.SessionInfo.prototype.getOnchainSessionId = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 8, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.game.SessionInfo} returns this
+ */
+proto.game.SessionInfo.prototype.setOnchainSessionId = function(value) {
+  return jspb.Message.setProto3IntField(this, 8, value);
 };
 
 
@@ -5446,7 +5476,8 @@ proto.game.Player.toObject = function(includeInstance, msg) {
     health: jspb.Message.getFieldWithDefault(msg, 5, 0),
     status: jspb.Message.getFieldWithDefault(msg, 6, ""),
     kills: jspb.Message.getFieldWithDefault(msg, 7, 0),
-    treasure: jspb.Message.getFieldWithDefault(msg, 8, 0)
+    treasure: jspb.Message.getFieldWithDefault(msg, 8, 0),
+    characterIdx: jspb.Message.getFieldWithDefault(msg, 9, 0)
   };
 
   if (includeInstance) {
@@ -5514,6 +5545,10 @@ proto.game.Player.deserializeBinaryFromReader = function(msg, reader) {
     case 8:
       var value = /** @type {number} */ (reader.readInt32());
       msg.setTreasure(value);
+      break;
+    case 9:
+      var value = /** @type {number} */ (reader.readUint32());
+      msg.setCharacterIdx(value);
       break;
     default:
       reader.skipField();
@@ -5597,6 +5632,13 @@ proto.game.Player.serializeBinaryToWriter = function(message, writer) {
   if (f !== 0) {
     writer.writeInt32(
       8,
+      f
+    );
+  }
+  f = message.getCharacterIdx();
+  if (f !== 0) {
+    writer.writeUint32(
+      9,
       f
     );
   }
@@ -5744,6 +5786,24 @@ proto.game.Player.prototype.getTreasure = function() {
  */
 proto.game.Player.prototype.setTreasure = function(value) {
   return jspb.Message.setProto3IntField(this, 8, value);
+};
+
+
+/**
+ * optional uint32 character_idx = 9;
+ * @return {number}
+ */
+proto.game.Player.prototype.getCharacterIdx = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 9, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.game.Player} returns this
+ */
+proto.game.Player.prototype.setCharacterIdx = function(value) {
+  return jspb.Message.setProto3IntField(this, 9, value);
 };
 
 

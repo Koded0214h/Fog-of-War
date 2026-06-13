@@ -7,12 +7,20 @@ function fmtTime(secs) {
   return `${m}:${s}`;
 }
 
+function arbiscanTx(hash) {
+  return `https://sepolia.arbiscan.io/tx/${hash}`;
+}
+
 export default function Results() {
   const { winner, payout, payoutTx, walletAddress, localMode, myTreasure, setScreen,
           lobbyDuration, timeLeft, lobbyFee, lobbyMax } = useGameStore();
 
+  // Prefer on-chain tx stored at session creation/join; fall back to payoutTx
+  const arbTx       = localStorage.getItem('fog_arb_tx') || payoutTx || null;
+  const onChainId   = localStorage.getItem('fog_arb_session');
+
   const timePlayed = lobbyDuration - (timeLeft ?? 0);
-  const prizePool  = payout || ((lobbyMax || 0) * (lobbyFee || 0) * 0.9).toFixed(2);
+  const prizePool  = payout || ((lobbyMax || 0) * (lobbyFee || 0) * 0.9).toFixed(4);
 
   // local mode: player was killed by a bot
   if (localMode) {
@@ -86,7 +94,7 @@ export default function Results() {
           </div>
           <div className="results__payout">
             <span className="payout__val">{prizePool}</span>
-            <span className="payout__unit">SOL</span>
+            <span className="payout__unit">ETH</span>
           </div>
           <div className="results__stat-row">
             <span className="results__stat-label">SESSION DURATION</span>
@@ -96,7 +104,13 @@ export default function Results() {
             <span className="results__stat-label">YOUR TREASURES</span>
             <span className="results__stat-val results__stat-val--gold">◆ {myTreasure}</span>
           </div>
-          <div className="results__payout-sub">90% prize pool · Devnet</div>
+          {onChainId && (
+            <div className="results__stat-row">
+              <span className="results__stat-label">ON-CHAIN SESSION</span>
+              <span className="results__stat-val">#{onChainId}</span>
+            </div>
+          )}
+          <div className="results__payout-sub">90% prize pool · Arbitrum Sepolia</div>
         </div>
 
         <div className="results__actions">
@@ -110,21 +124,29 @@ export default function Results() {
 
         <div className="results__tx">
           <span className="dot dot--green" />
-          {payoutTx ? (
+          {arbTx ? (
             <>
-              Settlement TX:&nbsp;
+              Arbitrum TX:&nbsp;
               <a
                 className="tx-hash"
-                href={`https://explorer.solana.com/tx/${payoutTx}?cluster=devnet`}
+                href={arbiscanTx(arbTx)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {payoutTx.slice(0, 8)}...{payoutTx.slice(-8)}
+                {arbTx.slice(0, 8)}…{arbTx.slice(-6)}
               </a>
-              &nbsp;· Devnet
+              &nbsp;·&nbsp;
+              <a
+                className="tx-hash"
+                href="https://sepolia.arbiscan.io/address/0xA234a8D716cB592E9a39668821cca8f382213fD9"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View Contract
+              </a>
             </>
           ) : (
-            <span className="tx-hash tx-hash--pending">Awaiting settlement…</span>
+            <span className="tx-hash tx-hash--pending">Awaiting on-chain settlement…</span>
           )}
         </div>
       </div>

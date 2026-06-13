@@ -13,6 +13,10 @@ const REVEAL_RADIUS = FOG_RADIUS * TILE * 1.3;
  * edge cases in Phaser 3.90 WebGL.
  */
 export default class FogSystem {
+  // Blood Hunt reveal radius is larger than the player's normal FOG_RADIUS
+  // so the target is clearly visible to all hunters.
+  static BLOOD_HUNT_RADIUS = FOG_RADIUS * TILE * 2.5;
+
   constructor(scene) {
     this.scene = scene;
     this.explored = new Uint8Array(GRID_W * GRID_H);
@@ -21,14 +25,22 @@ export default class FogSystem {
       .setDepth(DEPTH_FOG)
       .setOrigin(0, 0);
 
-    // Reusable graphics circle for erase — drawn once, repositioned
+    // Reusable graphics circle for player erase
     this._eraseGfx = scene.make.graphics({ add: false });
     this._eraseGfx.fillStyle(0xffffff, 1);
     this._eraseGfx.fillCircle(0, 0, REVEAL_RADIUS);
 
+    // Separate circle for Blood Hunt target reveal (larger radius)
+    this._bloodHuntGfx = scene.make.graphics({ add: false });
+    this._bloodHuntGfx.fillStyle(0xffffff, 1);
+    this._bloodHuntGfx.fillCircle(0, 0, FogSystem.BLOOD_HUNT_RADIUS);
   }
 
-  update(playerTileX, playerTileY) {
+  // revealTileX/Y: optional Blood Hunt target tile. When provided, fog is also
+  // erased around that position. Omit (or pass undefined) when Blood Hunt is
+  // inactive — the fog naturally re-covers that area on the next frame because
+  // the texture is rebuilt from scratch every call.
+  update(playerTileX, playerTileY, revealTileX, revealTileY) {
     const wx = (playerTileX + 0.5) * TILE;
     const wy = (playerTileY + 0.5) * TILE;
 
@@ -45,18 +57,27 @@ export default class FogSystem {
       }
     }
 
-    // Move erase circle to player world position
     this._eraseGfx.setPosition(wx, wy);
 
-    // Fill fog, then punch a hole at the player position
     this.fogRT.clear();
     this.fogRT.fill(0x050508, 0.95);
     this.fogRT.erase(this._eraseGfx);
 
+    // Blood Hunt: punch a second hole around the revealed target.
+    // When bloodHunt ends, revealTileX is undefined and this branch is skipped,
+    // so fog re-covers the target position automatically next frame.
+    if (revealTileX !== undefined && revealTileY !== undefined) {
+      this._bloodHuntGfx.setPosition(
+        (revealTileX + 0.5) * TILE,
+        (revealTileY + 0.5) * TILE,
+      );
+      this.fogRT.erase(this._bloodHuntGfx);
+    }
   }
 
   destroy() {
     this.fogRT?.destroy();
     this._eraseGfx?.destroy();
+    this._bloodHuntGfx?.destroy();
   }
 }

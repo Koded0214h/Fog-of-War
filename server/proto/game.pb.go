@@ -22,13 +22,12 @@ const (
 )
 
 type LoginRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	PublicKey        string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
-	Signature        string                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
-	Message          string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
-	TelegramInitData string                 `protobuf:"bytes,4,opt,name=telegram_init_data,json=telegramInitData,proto3" json:"telegram_init_data,omitempty"` // raw initData from Telegram WebApp
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PublicKey     string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	Signature     string                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LoginRequest) Reset() {
@@ -78,13 +77,6 @@ func (x *LoginRequest) GetSignature() string {
 func (x *LoginRequest) GetMessage() string {
 	if x != nil {
 		return x.Message
-	}
-	return ""
-}
-
-func (x *LoginRequest) GetTelegramInitData() string {
-	if x != nil {
-		return x.TelegramInitData
 	}
 	return ""
 }
@@ -558,16 +550,17 @@ func (x *CreateSessionResponse) GetError() string {
 }
 
 type SessionInfo struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionId       string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	HostId          string                 `protobuf:"bytes,2,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
-	MaxPlayers      uint32                 `protobuf:"varint,3,opt,name=max_players,json=maxPlayers,proto3" json:"max_players,omitempty"`
-	CurrentPlayers  uint32                 `protobuf:"varint,4,opt,name=current_players,json=currentPlayers,proto3" json:"current_players,omitempty"`
-	EntryFee        float32                `protobuf:"fixed32,5,opt,name=entry_fee,json=entryFee,proto3" json:"entry_fee,omitempty"`
-	DurationSeconds uint32                 `protobuf:"varint,6,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
-	Status          string                 `protobuf:"bytes,7,opt,name=status,proto3" json:"status,omitempty"` // "waiting" | "in_progress" | "ended"
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	HostId           string                 `protobuf:"bytes,2,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	MaxPlayers       uint32                 `protobuf:"varint,3,opt,name=max_players,json=maxPlayers,proto3" json:"max_players,omitempty"`
+	CurrentPlayers   uint32                 `protobuf:"varint,4,opt,name=current_players,json=currentPlayers,proto3" json:"current_players,omitempty"`
+	EntryFee         float32                `protobuf:"fixed32,5,opt,name=entry_fee,json=entryFee,proto3" json:"entry_fee,omitempty"`
+	DurationSeconds  uint32                 `protobuf:"varint,6,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	Status           string                 `protobuf:"bytes,7,opt,name=status,proto3" json:"status,omitempty"`                                                // "waiting" | "in_progress" | "ended"
+	OnchainSessionId uint64                 `protobuf:"varint,8,opt,name=onchain_session_id,json=onchainSessionId,proto3" json:"onchain_session_id,omitempty"` // Arbitrum on-chain session ID (0 if not linked)
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SessionInfo) Reset() {
@@ -647,6 +640,13 @@ func (x *SessionInfo) GetStatus() string {
 		return x.Status
 	}
 	return ""
+}
+
+func (x *SessionInfo) GetOnchainSessionId() uint64 {
+	if x != nil {
+		return x.OnchainSessionId
+	}
+	return 0
 }
 
 type ListSessionsRequest struct {
@@ -1894,13 +1894,12 @@ var File_game_proto protoreflect.FileDescriptor
 const file_game_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"game.proto\x12\x04game\"\x93\x01\n" +
+	"game.proto\x12\x04game\"e\n" +
 	"\fLoginRequest\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\x12,\n" +
-	"\x12telegram_init_data\x18\x04 \x01(\tR\x10telegramInitData\"O\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"O\n" +
 	"\rLoginResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1b\n" +
 	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\"\x17\n" +
@@ -1931,7 +1930,7 @@ const file_game_proto_rawDesc = "" +
 	"\x15CreateSessionResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\xef\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x9d\x02\n" +
 	"\vSessionInfo\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -1941,7 +1940,8 @@ const file_game_proto_rawDesc = "" +
 	"\x0fcurrent_players\x18\x04 \x01(\rR\x0ecurrentPlayers\x12\x1b\n" +
 	"\tentry_fee\x18\x05 \x01(\x02R\bentryFee\x12)\n" +
 	"\x10duration_seconds\x18\x06 \x01(\rR\x0fdurationSeconds\x12\x16\n" +
-	"\x06status\x18\a \x01(\tR\x06status\"\x15\n" +
+	"\x06status\x18\a \x01(\tR\x06status\x12,\n" +
+	"\x12onchain_session_id\x18\b \x01(\x04R\x10onchainSessionId\"\x15\n" +
 	"\x13ListSessionsRequest\"E\n" +
 	"\x14ListSessionsResponse\x12-\n" +
 	"\bsessions\x18\x01 \x03(\v2\x11.game.SessionInfoR\bsessions\"3\n" +

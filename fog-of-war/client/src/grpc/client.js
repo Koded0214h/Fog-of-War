@@ -23,12 +23,13 @@ export class AuthClient {
 // ─── Game ─────────────────────────────────────────────────────────────────
 
 export class GameClient {
-  constructor(token, walletPubkey = '') {
+  constructor(token, walletPubkey = '', ethAddress = '') {
     this.token = token;
     this.client = new grpcWeb.GameServicePromiseClient(BASE_URL, null, null);
     this.meta = {
-      authorization:    `Bearer ${token}`,
+      authorization:     `Bearer ${token}`,
       'x-wallet-pubkey': walletPubkey,
+      'x-eth-address':   ethAddress,
     };
   }
 
@@ -50,13 +51,14 @@ export class GameClient {
 
   // ── Session management ────────────────────────────────────────────────
 
-  async createSession(maxPlayers, entryFee, durationSeconds, botCount = 0) {
+  async createSession(maxPlayers, entryFee, durationSeconds, botCount = 0, onChainSessionId = 0) {
     const req = new game_pb.CreateSessionRequest();
     req.setMaxPlayers(maxPlayers);
     req.setEntryFee(entryFee);
     req.setDurationSeconds(durationSeconds);
     req.setBotCount(botCount);
-    const res = await this.client.createSession(req, this.meta);
+    const meta = { ...this.meta, 'x-onchain-session-id': String(onChainSessionId || '') };
+    const res = await this.client.createSession(req, meta);
     return { session_id: res.getSessionId(), error: res.getError() };
   }
 
@@ -64,13 +66,14 @@ export class GameClient {
     const req = new game_pb.ListSessionsRequest();
     const res = await this.client.listSessions(req, this.meta);
     return res.getSessionsList().map(s => ({
-      session_id:       s.getSessionId(),
-      host_id:          s.getHostId(),
-      max_players:      s.getMaxPlayers(),
-      current_players:  s.getCurrentPlayers(),
-      entry_fee:        s.getEntryFee(),
-      duration_seconds: s.getDurationSeconds(),
-      status:           s.getStatus(),
+      session_id:         s.getSessionId(),
+      host_id:            s.getHostId(),
+      max_players:        s.getMaxPlayers(),
+      current_players:    s.getCurrentPlayers(),
+      entry_fee:          s.getEntryFee(),
+      duration_seconds:   s.getDurationSeconds(),
+      status:             s.getStatus(),
+      onchain_session_id: s.getOnchainSessionId() || 0,
     }));
   }
 

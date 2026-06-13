@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/koded/fog-of-war/server/internal/auth"
@@ -24,6 +25,33 @@ func walletFromCtx(ctx context.Context) string {
 		return ""
 	}
 	return vals[0]
+}
+
+// ethAddressFromCtx extracts the Ethereum wallet address from gRPC metadata.
+func ethAddressFromCtx(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	vals := md.Get("x-eth-address")
+	if len(vals) == 0 {
+		return ""
+	}
+	return vals[0]
+}
+
+// onchainIDFromCtx extracts the on-chain session ID from gRPC metadata.
+func onchainIDFromCtx(ctx context.Context) uint64 {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return 0
+	}
+	vals := md.Get("x-onchain-session-id")
+	if len(vals) == 0 || vals[0] == "" {
+		return 0
+	}
+	id, _ := strconv.ParseUint(vals[0], 10, 64)
+	return id
 }
 
 type GameServer struct {
@@ -108,11 +136,26 @@ func (s *GameServer) CreateSession(ctx context.Context, req *pb.CreateSessionReq
 		return nil, status.Errorf(codes.Internal, "create session failed: %v", err)
 	}
 
-	// Store host's wallet pubkey so PayoutWinner can find it if the host wins
-	if walletPubkey := walletFromCtx(ctx); walletPubkey != "" {
+	// Store host's Ethereum address for on-chain payout
+	if ethAddr := ethAddressFromCtx(ctx); ethAddr != "" {
+		meta.Mu.Lock()
+		meta.PlayerWallets[playerID] = ethAddr
+		meta.Mu.Unlock()
+	} else if walletPubkey := walletFromCtx(ctx); walletPubkey != "" {
 		meta.Mu.Lock()
 		meta.PlayerWallets[playerID] = walletPubkey
 		meta.Mu.Unlock()
+	}
+
+	// Link the Arbitrum on-chain session ID to this server session
+	if onChainID := onchainIDFromCtx(ctx); onChainID > 0 {
+		meta.Mu.Lock()
+		meta.OnChainSessionID = onChainID
+		meta.Mu.Unlock()
+		s.Manager.Mu.Lock()
+		s.Manager.OnChainSessionID[meta.ID] = onChainID
+		s.Manager.Mu.Unlock()
+		fmt.Printf("Session %s linked to on-chain ID %d\n", meta.ID, onChainID)
 	}
 
 	return &pb.CreateSessionResponse{SessionId: meta.ID.String()}, nil
@@ -138,9 +181,13 @@ func (s *GameServer) JoinSession(ctx context.Context, req *pb.JoinSessionRequest
 		return &pb.JoinSessionResponse{Success: false, Error: "invalid session ID"}, nil
 	}
 
-	walletPubkey := walletFromCtx(ctx)
+	// Prefer Ethereum address; fall back to Solana pubkey
+	wallet := ethAddressFromCtx(ctx)
+	if wallet == "" {
+		wallet = walletFromCtx(ctx)
+	}
 
-	if err := s.Manager.JoinSession(sessionID, playerID, walletPubkey); err != nil {
+	if err := s.Manager.JoinSession(sessionID, playerID, wallet); err != nil {
 		return &pb.JoinSessionResponse{Success: false, Error: err.Error()}, nil
 	}
 
@@ -213,8 +260,11 @@ func (s *GameServer) Connect(req *pb.ConnectRequest, stream pb.GameService_Conne
 		return status.Errorf(codes.NotFound, "game not started yet for session %s", req.SessionId)
 	}
 
-	// Read wallet pubkey from metadata (sent by frontend as x-wallet-pubkey header)
-	walletPubkey := walletFromCtx(stream.Context())
+	// Prefer Ethereum address for payouts; fall back to Solana pubkey
+	winnerWallet := ethAddressFromCtx(stream.Context())
+	if winnerWallet == "" {
+		winnerWallet = walletFromCtx(stream.Context())
+	}
 	playerID, _ := playerIDFromCtx(stream.Context())
 
 	ch := e.Subscribe()
@@ -238,7 +288,7 @@ func (s *GameServer) Connect(req *pb.ConnectRequest, stream pb.GameService_Conne
 							context.Background(),
 							sessionID,
 							playerID,
-							walletPubkey,
+							winnerWallet,
 						)
 					}
 				}

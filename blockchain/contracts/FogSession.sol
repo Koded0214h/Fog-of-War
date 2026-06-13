@@ -11,7 +11,7 @@ contract FogSession {
     struct Session {
         uint256 id;
         address creator;
-        uint256 entryFee;       // in wei
+        uint256 entryFee;
         uint256 maxPlayers;
         uint256 duration;       // in seconds
         uint256 startTime;
@@ -23,22 +23,30 @@ contract FogSession {
 
     // ─── State ────────────────────────────────────────────────
     uint256 public sessionCount;
-    uint256 public constant CREATION_FEE = 0.5 ether;
-    uint256 public constant ENTRY_FEE    = 1 ether;
+    uint256 public creationFee;
+    uint256 public defaultEntryFee;
     address public owner;
+    address public gameServer;  // authorized caller for endSession / refundSession
 
     mapping(uint256 => Session) public sessions;
     mapping(uint256 => mapping(address => bool)) public hasJoined;
 
     // ─── Events ───────────────────────────────────────────────
-    event SessionCreated(uint256 indexed sessionId, address indexed creator, uint256 maxPlayers);
+    event SessionCreated(uint256 indexed sessionId, address indexed creator, uint256 maxPlayers, uint256 entryFee);
     event PlayerJoined(uint256 indexed sessionId, address indexed player);
     event SessionStarted(uint256 indexed sessionId, uint256 startTime);
     event SessionEnded(uint256 indexed sessionId, address indexed winner, uint256 prize);
+    event SessionRefunded(uint256 indexed sessionId);
+    event GameServerUpdated(address indexed previous, address indexed next);
 
     // ─── Modifiers ────────────────────────────────────────────
     modifier onlyOwner() {
         require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    modifier onlyAuthorized() {
+        require(msg.sender == owner || msg.sender == gameServer, "Not authorized");
         _;
     }
 
@@ -53,39 +61,49 @@ contract FogSession {
     }
 
     // ─── Constructor ──────────────────────────────────────────
-    constructor() {
-        owner = msg.sender;
+    constructor(uint256 _creationFee, uint256 _defaultEntryFee) {
+        owner      = msg.sender;
+        gameServer = msg.sender;
+        creationFee     = _creationFee;
+        defaultEntryFee = _defaultEntryFee;
+    }
+
+    // ─── Admin ────────────────────────────────────────────────
+    function setGameServer(address _gameServer) external onlyOwner {
+        emit GameServerUpdated(gameServer, _gameServer);
+        gameServer = _gameServer;
+    }
+
+    function setFees(uint256 _creationFee, uint256 _defaultEntryFee) external onlyOwner {
+        creationFee     = _creationFee;
+        defaultEntryFee = _defaultEntryFee;
     }
 
     // ─── Create Session ───────────────────────────────────────
-    /// @notice Creator pays 0.5 SOL creation fee to spin up a session
     function createSession(uint256 maxPlayers, uint256 durationSeconds) external payable {
-        require(msg.value == CREATION_FEE, "Must pay 0.5 ETH creation fee");
-        require(maxPlayers >= 2 && maxPlayers <= 200, "Players must be between 2 and 200");
-        require(durationSeconds >= 60, "Duration must be at least 60 seconds");
+        require(msg.value == creationFee, "Wrong creation fee");
+        require(maxPlayers >= 2 && maxPlayers <= 200, "Players must be 2-200");
+        require(durationSeconds >= 60, "Duration must be >= 60s");
 
-        // Deploy a fresh vault for this session
-        FogVault vault = new FogVault(address(this), ENTRY_FEE);
+        FogVault vault = new FogVault(address(this), defaultEntryFee);
 
         uint256 sessionId = sessionCount++;
 
         Session storage s = sessions[sessionId];
         s.id         = sessionId;
         s.creator    = msg.sender;
-        s.entryFee   = ENTRY_FEE;
+        s.entryFee   = defaultEntryFee;
         s.maxPlayers = maxPlayers;
         s.duration   = durationSeconds;
         s.state      = SessionState.WAITING;
         s.vault      = vault;
 
-        // Forward creation fee to owner (house)
         payable(owner).transfer(msg.value);
 
-        emit SessionCreated(sessionId, msg.sender, maxPlayers);
+        emit SessionCreated(sessionId, msg.sender, maxPlayers, defaultEntryFee);
     }
 
     // ─── Join Session ─────────────────────────────────────────
-    /// @notice Player pays entry fee to join a waiting session
     function joinSession(uint256 sessionId)
         external
         payable
@@ -101,14 +119,12 @@ contract FogSession {
         hasJoined[sessionId][msg.sender] = true;
         s.players.push(msg.sender);
 
-        // Forward entry fee directly into the vault
         s.vault.deposit{value: msg.value}(msg.sender);
 
         emit PlayerJoined(sessionId, msg.sender);
     }
 
     // ─── Start Session ────────────────────────────────────────
-    /// @notice Creator starts the session once enough players joined
     function startSession(uint256 sessionId)
         external
         sessionExists(sessionId)
@@ -125,28 +141,44 @@ contract FogSession {
     }
 
     // ─── End Session ──────────────────────────────────────────
-    /// @notice Owner or game server calls this to declare a winner
+    // No time-lock: the game server is authoritative on when a session ends
+    // (timer expired OR last player standing). Only authorized callers can end.
     function endSession(uint256 sessionId, address winner)
         external
-        onlyOwner
+        onlyAuthorized
         sessionExists(sessionId)
         inState(sessionId, SessionState.ACTIVE)
     {
         Session storage s = sessions[sessionId];
-
         require(hasJoined[sessionId][winner], "Winner must be a player");
-        require(
-            block.timestamp >= s.startTime + s.duration,
-            "Session still running"
-        );
 
         s.state  = SessionState.ENDED;
         s.winner = winner;
 
-        // Trigger payout from vault
         uint256 prize = s.vault.payout(winner);
 
         emit SessionEnded(sessionId, winner, prize);
+    }
+
+    // ─── Refund Session ───────────────────────────────────────
+    // Safety valve: if all players disconnect and the timer has expired
+    // with no winner declared, authorized caller can trigger full refunds.
+    function refundSession(uint256 sessionId)
+        external
+        onlyAuthorized
+        sessionExists(sessionId)
+        inState(sessionId, SessionState.ACTIVE)
+    {
+        Session storage s = sessions[sessionId];
+        require(
+            block.timestamp > s.startTime + s.duration + 2 hours,
+            "Grace period not elapsed"
+        );
+
+        s.state = SessionState.ENDED;
+        s.vault.refundAll(s.players);
+
+        emit SessionRefunded(sessionId);
     }
 
     // ─── Views ────────────────────────────────────────────────
@@ -162,14 +194,26 @@ contract FogSession {
         return address(sessions[sessionId].vault);
     }
 
+    function getSession(uint256 sessionId) external view returns (
+        address creator,
+        uint256 entryFee,
+        uint256 maxPlayers,
+        uint256 duration,
+        uint256 startTime,
+        SessionState state,
+        address winner,
+        address vault
+    ) {
+        Session storage s = sessions[sessionId];
+        return (s.creator, s.entryFee, s.maxPlayers, s.duration, s.startTime, s.state, s.winner, address(s.vault));
+    }
+
     // ─── Withdrawal ──────────────────────────────────────────
-    /// @notice Allow owner to withdraw accumulated house fees
     function withdraw() external onlyOwner {
         uint256 balance = address(this).balance;
         require(balance > 0, "Nothing to withdraw");
         payable(owner).transfer(balance);
     }
 
-    // Allow contract to receive ETH (house fees from vaults)
     receive() external payable {}
 }

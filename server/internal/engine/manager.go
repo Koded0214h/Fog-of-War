@@ -12,33 +12,35 @@ import (
 
 // SessionMeta holds lobby-phase state before a game starts.
 type SessionMeta struct {
-	ID           uuid.UUID
-	HostID       uuid.UUID
-	MaxPlayers   int
-	EntryFee     float64
-	DurationSecs int
-	BotCount     int
-	Status       string // "waiting" | "in_progress" | "ended"
-	Players      map[uuid.UUID]bool
-	PaidPlayers  map[uuid.UUID]string // playerID → deposit tx sig
-	PlayerWallets map[uuid.UUID]string // playerID → Solana pubkey
-	WinnerPubkey string               // Solana pubkey of winner (set at game end)
-	PayoutTxSig  string               // tx sig of winner payout
-	Watchers     []chan *pb.LobbyUpdate
-	Mu           sync.RWMutex
+	ID               uuid.UUID
+	HostID           uuid.UUID
+	MaxPlayers       int
+	EntryFee         float64
+	DurationSecs     int
+	BotCount         int
+	Status           string // "waiting" | "in_progress" | "ended"
+	OnChainSessionID uint64 // Arbitrum on-chain session ID (0 if not linked)
+	Players          map[uuid.UUID]bool
+	PaidPlayers      map[uuid.UUID]string // playerID → deposit tx sig
+	PlayerWallets    map[uuid.UUID]string // playerID → wallet address (Ethereum or Solana)
+	WinnerPubkey     string               // winner wallet address (set at game end)
+	PayoutTxSig      string               // tx sig of winner payout
+	Watchers         []chan *pb.LobbyUpdate
+	Mu               sync.RWMutex
 }
 
 func (s *SessionMeta) ToInfo() *pb.SessionInfo {
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
 	return &pb.SessionInfo{
-		SessionId:       s.ID.String(),
-		HostId:          s.HostID.String(),
-		MaxPlayers:      uint32(s.MaxPlayers),
-		CurrentPlayers:  uint32(len(s.Players)),
-		EntryFee:        float32(s.EntryFee),
-		DurationSeconds: uint32(s.DurationSecs),
-		Status:          s.Status,
+		SessionId:        s.ID.String(),
+		HostId:           s.HostID.String(),
+		MaxPlayers:       uint32(s.MaxPlayers),
+		CurrentPlayers:   uint32(len(s.Players)),
+		EntryFee:         float32(s.EntryFee),
+		DurationSeconds:  uint32(s.DurationSecs),
+		Status:           s.Status,
+		OnchainSessionId: s.OnChainSessionID,
 	}
 }
 
@@ -294,61 +296,66 @@ func (m *GameManager) ConfirmDeposit(ctx context.Context, sessionID, playerID uu
 	return nil
 }
 
-// PayoutWinner sends the prize pool to the winner's Solana wallet.
-func (m *GameManager) PayoutWinner(ctx context.Context, sessionID uuid.UUID, winnerPlayerID uuid.UUID, winnerPubkey string) {
+// PayoutWinner triggers the on-chain endSession call so the contract pays the winner.
+func (m *GameManager) PayoutWinner(ctx context.Context, sessionID uuid.UUID, winnerPlayerID uuid.UUID, winnerWallet string) {
 	s, ok := m.GetSession(sessionID)
 	if !ok {
 		return
 	}
 
 	s.Mu.RLock()
-	// Skip if already paid out
 	if s.PayoutTxSig != "" {
 		s.Mu.RUnlock()
 		return
 	}
-	entryFee  := s.EntryFee
-	paidCount := len(s.PaidPlayers)
-	// If winnerPubkey is not provided, try to find it in our stored wallets
-	if winnerPubkey == "" {
-		winnerPubkey = s.PlayerWallets[winnerPlayerID]
+	if winnerWallet == "" {
+		winnerWallet = s.PlayerWallets[winnerPlayerID]
 	}
 	s.Mu.RUnlock()
 
-	prizePool := float64(paidCount) * entryFee * 0.9 // 90% to winner, 10% stays in house
-
-	if winnerPubkey == "" {
+	if winnerWallet == "" {
 		fmt.Printf("Skipping payout: no wallet address for winner %s in session %s\n", winnerPlayerID, sessionID)
 		return
 	}
 
-	// Skip payout only if:
-	// 1. No Solana service configured, OR
-	// 2. Prize pool is 0 AND we're not in mock mode (can't send real payout with 0 SOL)
-	if m.Solana == nil || (prizePool <= 0 && !m.Solana.IsMock) {
-		fmt.Printf("Skipping payout: prizePool=%.4f isMock=%v\n", prizePool, m.Solana != nil && m.Solana.IsMock)
-		return
+	// Look up the Arbitrum on-chain session ID (stored on both meta and manager map)
+	s.Mu.RLock()
+	onChainID := s.OnChainSessionID
+	s.Mu.RUnlock()
+	if onChainID == 0 {
+		m.Mu.RLock()
+		onChainID = m.OnChainSessionID[sessionID]
+		m.Mu.RUnlock()
 	}
+	hasOnChain := onChainID > 0
 
-	txSig, err := m.Solana.SendPayout(ctx, winnerPubkey, prizePool)
-	if err != nil {
-		fmt.Printf("Payout failed: session=%s winner=%s err=%v\n", sessionID, winnerPubkey, err)
-		return
+	var txSig string
+	if hasOnChain && onChainID > 0 && m.Arbitrum != nil {
+		tx, err := m.Arbitrum.EndSession(ctx, onChainID, winnerWallet)
+		if err != nil {
+			fmt.Printf("Arbitrum EndSession failed: session=%s onchain=%d err=%v\n", sessionID, onChainID, err)
+		} else {
+			txSig = tx
+			fmt.Printf("Arbitrum EndSession: onchain=%d winner=%s tx=%s\n", onChainID, winnerWallet, tx)
+		}
+	} else {
+		fmt.Printf("No on-chain session for %s — skipping EndSession\n", sessionID)
 	}
 
 	s.Mu.Lock()
-	s.WinnerPubkey = winnerPubkey
-	s.PayoutTxSig  = txSig
+	s.WinnerPubkey = winnerWallet
+	if txSig != "" {
+		s.PayoutTxSig = txSig
+	}
 	s.Mu.Unlock()
 
-	fmt.Printf("Payout sent: %.4f SOL → %s tx=%s\n", prizePool, winnerPubkey, txSig)
-
-	// Broadcast payout confirmation to any still-connected clients
-	m.Mu.RLock()
-	e, hasEngine := m.Engines[sessionID]
-	m.Mu.RUnlock()
-	if hasEngine {
-		e.BroadcastEvent("payout", winnerPlayerID.String(), txSig)
+	if txSig != "" {
+		m.Mu.RLock()
+		e, hasEngine := m.Engines[sessionID]
+		m.Mu.RUnlock()
+		if hasEngine {
+			e.BroadcastEvent("payout", winnerPlayerID.String(), txSig)
+		}
 	}
 }
 

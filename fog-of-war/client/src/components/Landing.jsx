@@ -1,19 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
-import {
-  Connection, LAMPORTS_PER_SOL, PublicKey,
-  Transaction, SystemProgram,
-} from '@solana/web3.js';
 import { useGameStore } from '../store';
-import {
-  loginWithWallet, createSession, listSessions, joinSession, watchLobby,
-  getHouseWallet, confirmDeposit,
-} from '../socket';
-import WalletSelector from './WalletSelector';
-import WalletDebug from './WalletDebug';
+import { createSession, listSessions, joinSession, watchLobby, loginWithEthAddress } from '../socket';
+import { useArbitrumWallet, useArbitrumSession } from '../arbitrum/useArbitrum.js';
+import { formatEther } from 'viem';
 import './Landing.css';
-
-const DEVNET_RPC = 'https://api.devnet.solana.com';
 
 const CHAR_NAMES = [
   'knight_m', 'elf_m', 'lizard_m', 'wizzard_m',
@@ -28,34 +18,37 @@ const playClick = () => {
 };
 
 export default function Landing() {
-  const wallet = useWallet();
-  const { publicKey, connected } = wallet;
   const store = useGameStore();
   const { setWallet, setScreen, walletAddress } = store;
   const canvasRef = useRef(null);
+
+  const arb = useArbitrumWallet();
+  const arbSession = useArbitrumSession();
 
   // 'home' | 'host' | 'browse'
   const [mode,    setMode]    = useState('home');
   const [busy,    setBusy]    = useState(false);
   const [error,   setError]   = useState('');
+  const [txHash,  setTxHash]  = useState('');
 
   // host form
   const [maxPlayers, setMaxPlayers] = useState(8);
-  const [entryFee,   setEntryFee]   = useState(1);
   const [duration,   setDuration]   = useState(300);
   const [botCount,   setBotCount]   = useState(4);
 
   // browse list
   const [sessions, setSessions] = useState([]);
 
-  // fetch balance
+  // sync Arbitrum wallet to store and auto-login with Go server
   useEffect(() => {
-    if (!connected || !publicKey) return;
-    const conn = new Connection('https://api.devnet.solana.com');
-    conn.getBalance(publicKey).then(lamports =>
-      setWallet(publicKey.toBase58(), (lamports / LAMPORTS_PER_SOL).toFixed(2))
-    );
-  }, [connected, publicKey]);
+    if (arb.isConnected && arb.address) {
+      setWallet(arb.address, arb.balance);
+      const stored = localStorage.getItem('fog_eth_address');
+      if (stored !== arb.address) {
+        loginWithEthAddress(arb.address).catch(console.error);
+      }
+    }
+  }, [arb.isConnected, arb.address, arb.balance]);
 
   // particle background
   useEffect(() => {
@@ -91,49 +84,28 @@ export default function Landing() {
     store.setScreen('game');
   };
 
-  const ensureAuth = async () => {
-    if (!connected || !publicKey) throw new Error('Connect your wallet first');
-    if (!wallet.signMessage)     throw new Error('Wallet does not support message signing');
-    // Always refresh token to avoid expiration errors
-    await loginWithWallet(publicKey, wallet.signMessage);
-  };
-
   const handleHost = async (e) => {
     e.preventDefault();
-    setBusy(true); setError('');
+    if (!arb.isConnected) { setError('Connect your wallet first'); return; }
+    if (arb.isWrongNetwork) { setError('Switch MetaMask to Arbitrum Sepolia'); return; }
+    setBusy(true); setError(''); setTxHash('');
     try {
-      await ensureAuth();
+      // 1. Pay creation fee + register session on Arbitrum
+      const { sessionId: onChainId, txHash: hash } = await arbSession.createSessionOnChain(maxPlayers, duration);
+      setTxHash(hash);
 
-      // 1. Create the session first to get a sessionId
-      const res = await createSession(maxPlayers, entryFee, duration, botCount);
+      // 2. Register with Go server (game state / matchmaking)
+      const res = await createSession(maxPlayers, 0, duration, botCount, onChainId);
       if (res.error) throw new Error(res.error);
 
-      // 2. If there's an entry fee, host pays it too (same as joining)
-      if (entryFee > 0) {
-        const houseWallet = await getHouseWallet();
-        const isMock = !houseWallet || houseWallet === 'MOCK_HOUSE_WALLET_ADDRESS';
-
-        if (!isMock) {
-          const conn = new Connection(DEVNET_RPC, 'confirmed');
-          const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
-          const tx = new Transaction({ recentBlockhash: blockhash, feePayer: publicKey });
-          tx.add(SystemProgram.transfer({
-            fromPubkey: publicKey,
-            toPubkey:   new PublicKey(houseWallet),
-            lamports:   Math.round(entryFee * LAMPORTS_PER_SOL),
-          }));
-          const txSig = await wallet.sendTransaction(tx, conn);
-          await conn.confirmTransaction({ signature: txSig, blockhash, lastValidBlockHeight }, 'confirmed');
-          const depositRes = await confirmDeposit(res.session_id, txSig);
-          if (!depositRes.success) throw new Error(depositRes.error || 'Host deposit failed');
-        }
-        // mock mode: skip on-chain payment — host is already in session from CreateSession
-      }
+      // Store the on-chain tx so Results screen can show it
+      localStorage.setItem('fog_arb_tx', hash);
+      localStorage.setItem('fog_arb_session', String(onChainId));
 
       store.setLocalMode(false);
       store.setSessionId(res.session_id);
       store.setIsHost(true);
-      store.setMyId(localStorage.getItem('fog_player_id'));
+      store.setMyId(arb.address);
       watchLobby(res.session_id);
       setScreen('lobby');
     } catch (err) {
@@ -146,7 +118,6 @@ export default function Landing() {
   const handleBrowse = async () => {
     setBusy(true); setError('');
     try {
-      await ensureAuth();
       const list = await listSessions();
       setSessions(list);
       setMode('browse');
@@ -157,62 +128,31 @@ export default function Landing() {
     }
   };
 
-  // Pay entry fee → confirm on-chain → join session
   const handleJoin = async (sessionData) => {
-    const sessionId = typeof sessionData === 'string' ? sessionData : sessionData.session_id;
-    const fee       = typeof sessionData === 'object' ? sessionData.entry_fee : 0;
+    if (!arb.isConnected) { setError('Connect your wallet first'); return; }
+    if (arb.isWrongNetwork) { setError('Switch MetaMask to Arbitrum Sepolia'); return; }
 
-    setBusy(true); setError('');
+    const serverSessionId = typeof sessionData === 'string' ? sessionData : sessionData.session_id;
+    const onChainId       = sessionData.onchain_session_id;
+
+    setBusy(true); setError(''); setTxHash('');
     try {
-      await ensureAuth();
-
-      if (fee > 0) {
-        // 1. Fetch house wallet address from server
-        const houseWallet = await getHouseWallet();
-        const isMock = !houseWallet || houseWallet === 'MOCK_HOUSE_WALLET_ADDRESS';
-
-        if (!isMock) {
-
-        // 2. Build SOL transfer transaction
-        const conn = new Connection(DEVNET_RPC, 'confirmed');
-        const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
-        const tx = new Transaction({
-          recentBlockhash: blockhash,
-          feePayer: publicKey,
-        });
-        tx.add(SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey:   new PublicKey(houseWallet),
-          lamports:   Math.round(fee * LAMPORTS_PER_SOL),
-        }));
-
-        // 3. Use wallet adapter sendTransaction — routes through Phantom/Solflare correctly
-        const txSig = await wallet.sendTransaction(tx, conn);
-        await conn.confirmTransaction(
-          { signature: txSig, blockhash, lastValidBlockHeight },
-          'confirmed',
-        );
-
-          // 4. Tell backend to verify + register deposit
-          const depositRes = await confirmDeposit(sessionId, txSig);
-          if (!depositRes.success) throw new Error(depositRes.error || 'Deposit failed');
-          // confirmDeposit already joins session — skip joinSession below
-        } else {
-          // Mock/dev mode — skip on-chain payment, just join
-          const res = await joinSession(sessionId);
-          if (!res.success) throw new Error(res.error || 'Join failed');
-        }
-      } else {
-        // Free session — just join normally
-        const res = await joinSession(sessionId);
-        if (!res.success) throw new Error(res.error || 'Join failed');
+      // 1. Pay entry fee on Arbitrum if the session has an on-chain ID
+      if (onChainId != null) {
+        const hash = await arbSession.joinSessionOnChain(onChainId);
+        setTxHash(hash);
+        localStorage.setItem('fog_arb_tx', hash);
       }
 
+      // 2. Tell Go server the player joined
+      const res = await joinSession(serverSessionId);
+      if (!res.success) throw new Error(res.error || 'Join failed');
+
       store.setLocalMode(false);
-      store.setSessionId(sessionId);
+      store.setSessionId(serverSessionId);
       store.setIsHost(false);
-      store.setMyId(localStorage.getItem('fog_player_id'));
-      watchLobby(sessionId);
+      store.setMyId(arb.address);
+      watchLobby(serverSessionId);
       setScreen('lobby');
     } catch (err) {
       setError(err.message);
@@ -226,7 +166,7 @@ export default function Landing() {
       <canvas ref={canvasRef} className="landing__bg" />
 
       <div className="landing__content">
-        <div className="landing__eyebrow">SOLANA DEVNET · BATTLE ROYALE</div>
+        <div className="landing__eyebrow">ARBITRUM SEPOLIA · BATTLE ROYALE</div>
 
         <h1 className="landing__title">
           <span className="landing__title-fog">FOG</span>
@@ -244,18 +184,36 @@ export default function Landing() {
         {/* ── Home ───────────────────────────────────────────── */}
         {mode === 'home' && (
           <div className="landing__actions">
-            <WalletSelector />
-            {connected && (
-              <div className="landing__game-btns">
-                <button className="enter-btn" onClick={() => { playClick(); setMode('host'); }} disabled={busy}>
-                  <span className="enter-btn__icon">⚔</span>
-                  HOST GAME
-                </button>
-                <button className="enter-btn enter-btn--secondary" onClick={() => { playClick(); handleBrowse(); }} disabled={busy}>
-                  <span className="enter-btn__icon">◎</span>
-                  {busy ? 'LOADING...' : 'JOIN GAME'}
-                </button>
+            {/* Arbitrum wallet connect */}
+            {!arb.isConnected ? (
+              <div className="landing__connect-row">
+                {arb.connectors.map(c => (
+                  <button
+                    key={c.id}
+                    className="enter-btn enter-btn--connect"
+                    onClick={() => { playClick(); arb.connect({ connector: c }); }}
+                    disabled={arb.isConnecting}
+                  >
+                    {arb.isConnecting ? 'CONNECTING...' : `CONNECT ${c.name.toUpperCase()}`}
+                  </button>
+                ))}
               </div>
+            ) : (
+              <>
+                {arb.isWrongNetwork && (
+                  <div className="landing__error">Switch MetaMask to Arbitrum Sepolia (chain 421614)</div>
+                )}
+                <div className="landing__game-btns">
+                  <button className="enter-btn" onClick={() => { playClick(); setMode('host'); }} disabled={busy || arb.isWrongNetwork}>
+                    <span className="enter-btn__icon">⚔</span>
+                    HOST GAME
+                  </button>
+                  <button className="enter-btn enter-btn--secondary" onClick={() => { playClick(); handleBrowse(); }} disabled={busy}>
+                    <span className="enter-btn__icon">◎</span>
+                    {busy ? 'LOADING...' : 'JOIN GAME'}
+                  </button>
+                </div>
+              </>
             )}
             <button className="solo-btn" onClick={() => { playClick(); handleSoloPlay(); }}>
               PLAY SOLO (NO WALLET)
@@ -296,12 +254,6 @@ export default function Landing() {
             </label>
 
             <label className="session-form__field">
-              <span>ENTRY FEE (SOL)</span>
-              <input type="number" min="0" step="0.1" value={entryFee}
-                onChange={e => setEntryFee(Number(e.target.value))} />
-            </label>
-
-            <label className="session-form__field">
               <span>DURATION (SEC)</span>
               <input type="number" min="60" step="60" value={duration}
                 onChange={e => setDuration(Number(e.target.value))} />
@@ -314,13 +266,27 @@ export default function Landing() {
             </label>
 
             <div className="session-form__preview">
-              Prize pool: <strong>{(maxPlayers * entryFee * 0.9).toFixed(2)} SOL</strong>
+              Entry fee: <strong>{formatEther(arbSession.entryFee)} ETH</strong> per player
+              <br />
+              Creation fee: <strong>{formatEther(arbSession.creationFee)} ETH</strong> (one-time)
               {botCount > 0 && <span className="session-form__bots"> · {botCount} AI bots</span>}
             </div>
 
+            {txHash && (
+              <div className="session-form__tx">
+                Arbitrum tx: <a
+                  href={`https://sepolia.arbiscan.io/tx/${txHash}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="session-form__tx-link"
+                >
+                  {txHash.slice(0, 10)}…{txHash.slice(-6)}
+                </a>
+              </div>
+            )}
+
             <div className="session-form__actions">
               <button type="submit" className="enter-btn" disabled={busy}>
-                {busy ? 'CREATING...' : 'CREATE & ENTER LOBBY'}
+                {busy ? 'CONFIRMING ON ARBITRUM...' : 'CREATE & ENTER LOBBY'}
               </button>
               <button type="button" className="solo-btn" onClick={() => { setMode('home'); setError(''); }}>
                 BACK
@@ -344,7 +310,7 @@ export default function Landing() {
                   <span className="session-row__players">
                     {s.current_players}/{s.max_players} PLAYERS
                   </span>
-                  <span className="session-row__fee">{s.entry_fee} SOL</span>
+                  <span className="session-row__fee">{s.entry_fee > 0 ? `${formatEther(BigInt(s.entry_fee))} ETH` : 'FREE'}</span>
                   <span className="session-row__time">
                     {Math.floor(s.duration_seconds / 60)}MIN
                   </span>
@@ -354,7 +320,7 @@ export default function Landing() {
                   onClick={() => handleJoin(s)}
                   disabled={busy}
                 >
-                  {s.entry_fee > 0 ? `JOIN · ${s.entry_fee} SOL` : 'JOIN FREE'}
+                  {s.entry_fee > 0 ? `JOIN · ${formatEther(BigInt(s.entry_fee))} ETH` : 'JOIN FREE'}
                 </button>
               </div>
             ))}
@@ -369,10 +335,11 @@ export default function Landing() {
           </div>
         )}
 
-        {connected && (
+        {arb.isConnected && (
           <div className="landing__wallet-info">
             <span className="dot dot--green" />
-            {walletAddress?.slice(0, 4)}...{walletAddress?.slice(-4)} · Devnet
+            {arb.address?.slice(0, 6)}…{arb.address?.slice(-4)} · {arb.balance} ETH · Arbitrum Sepolia
+            <button className="wallet-disconnect" onClick={() => arb.disconnect()}>✕</button>
           </div>
         )}
       </div>
@@ -380,12 +347,18 @@ export default function Landing() {
       <div className="landing__footer">
         <span>BLOOD HUNT activates at 5 min remaining</span>
         <span>·</span>
-        <span>10% house fee</span>
+        <span>10% house fee on-chain</span>
         <span>·</span>
-        <span>Powered by Solana</span>
+        <span>Powered by Arbitrum</span>
+        <span>·</span>
+        <a
+          href={`https://sepolia.arbiscan.io/address/${arbSession.contractAddress}`}
+          target="_blank" rel="noopener noreferrer"
+          className="landing__footer-link"
+        >
+          View Contract
+        </a>
       </div>
-
-      <WalletDebug />
     </div>
   );
 }

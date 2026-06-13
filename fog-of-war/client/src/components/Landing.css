@@ -435,3 +435,64 @@
   transform: scale(1.1);
   filter: drop-shadow(0 0 4px var(--accent));
 }
+
+/* ── Arbitrum wallet ─────────────────────────────────── */
+.landing__connect-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.enter-btn--connect {
+  min-width: 220px;
+  border-color: #28a0f0;
+}
+
+.enter-btn--connect:hover {
+  border-color: #4db8ff;
+  box-shadow: 0 0 16px rgba(40,160,240,0.3);
+}
+
+.wallet-disconnect {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: 8px;
+  font-size: 12px;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+
+.wallet-disconnect:hover { color: var(--accent); }
+
+/* ── Session form tx link ────────────────────────────── */
+.session-form__tx {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.session-form__tx-link {
+  color: #28a0f0;
+  text-decoration: none;
+}
+
+.session-form__tx-link:hover {
+  color: #4db8ff;
+  text-decoration: underline;
+}
+
+/* ── Footer contract link ────────────────────────────── */
+.landing__footer-link {
+  color: #28a0f0;
+  text-decoration: none;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+.landing__footer-link:hover {
+  color: #4db8ff;
+  text-decoration: underline;
+}

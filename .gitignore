@@ -208,3 +208,6 @@ __marimo__/
 house-wallet.json
 blockchain/house-wallet.json
 server/house-wallet.json
+
+.vscode/
+.claude/

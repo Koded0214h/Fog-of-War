@@ -153,15 +153,9 @@ func (e *GameEngine) spawnLoot() {
 	}
 }
 
-// playerSpawnPositions mirrors the spawn corners used by AddPlayer.
-var playerSpawnPositions = [][2]float64{
-	{20, 20}, {108, 20}, {20, 108}, {108, 108},
-	{64, 10}, {64, 118}, {10, 64}, {118, 64},
-}
-
 // tooCloseToSpawn returns true if (px,py) is within minDist tiles of any player spawn corner.
 func tooCloseToSpawn(px, py, minDist float64) bool {
-	for _, sp := range playerSpawnPositions {
+	for _, sp := range safeSpawnPositions {
 		if math.Abs(px-sp[0])+math.Abs(py-sp[1]) < minDist {
 			return true
 		}
@@ -201,28 +195,26 @@ func (e *GameEngine) Start() {
 	go e.tickLoop()
 }
 
+// safeSpawnPositions are fixed corners that the client dungeon guarantees have
+// floor rooms carved at them. All player spawns must use these positions so
+// server and client agree without any BFS correction.
+var safeSpawnPositions = [][2]float64{
+	{20, 20}, {108, 20}, {20, 108}, {108, 108},
+	{64, 10}, {64, 118}, {10, 64}, {118, 64},
+}
+
 // AddPlayer adds a player at the given spawn position.
 func (e *GameEngine) AddPlayer(playerID uuid.UUID, username string, x, y float64, charIdx uint32) {
-	// Spread players across the map corners/edges to avoid instant stacking
-	spawnPositions := [][2]float64{
-		{20, 20}, {108, 20}, {20, 108}, {108, 108},
-		{64, 10}, {64, 118}, {10, 64}, {118, 64},
-	}
-
 	e.mu.Lock()
 	idx := len(e.Players)
 	e.mu.Unlock()
 
-	spawnX := x
-	spawnY := y
-	if idx < len(spawnPositions) {
-		spawnX = spawnPositions[idx][0]
-		spawnY = spawnPositions[idx][1]
-	} else {
-		// Random position far from center for extra players
-		spawnX = 5 + rand.Float64()*float64(GridW-10)
-		spawnY = 5 + rand.Float64()*float64(GridH-10)
-	}
+	// Always pick from safeSpawnPositions (cycling for sessions with many players).
+	// These positions have guaranteed dungeon rooms carved at them on the client,
+	// so no BFS correction is needed and server/client positions always match.
+	sp := safeSpawnPositions[idx%len(safeSpawnPositions)]
+	spawnX := sp[0]
+	spawnY := sp[1]
 
 	// Clamp character index to valid range
 	if charIdx > 7 {

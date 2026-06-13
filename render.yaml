@@ -8,12 +8,14 @@ services:
     healthCheckPath: /health
     envVars:
       - key: JWT_SECRET
-        generateValue: true          # Render auto-generates a secure random value
-      - key: SOLANA_RPC_URL
-        value: https://api.devnet.solana.com
+        generateValue: true
       - key: USE_MOCK_SERVICES
-        value: "true"                # set to "false" once house wallet is funded on devnet
-      - key: SOLANA_HOUSE_PRIVATE_KEY
-        sync: false                  # set manually in Render dashboard — never commit this
+        value: "false"
+      - key: FOG_SESSION_CONTRACT
+        value: "0xA234a8D716cB592E9a39668821cca8f382213fD9"
+      - key: ARBITRUM_RPC_URL
+        value: "https://sepolia-rollup.arbitrum.io/rpc"
+      - key: ARBITRUM_PRIVATE_KEY
+        sync: false                  # set in Render dashboard — gameServer wallet private key
       - key: ALLOWED_ORIGINS
-        value: https://fog-of-war.vercel.app  # update to your actual Vercel URL
+        value: https://fog-of-war.vercel.app

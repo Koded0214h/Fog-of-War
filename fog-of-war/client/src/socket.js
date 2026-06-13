@@ -45,12 +45,23 @@ export async function loginWithWallet(publicKey, signMessageFn) {
   return res;
 }
 
+// Arbitrum login — no signature required; server generates a UUID player ID.
+export async function loginWithEthAddress(ethAddress) {
+  const res = await authClient.login(ethAddress, '', 'arbitrum-login');
+  localStorage.setItem('fog_token', res.access_token);
+  localStorage.setItem('fog_player_id', res.player_id);
+  localStorage.setItem('fog_eth_address', ethAddress);
+  gameClient = new GameClient(res.access_token, '', ethAddress);
+  return res;
+}
+
 function ensureClient() {
   if (!gameClient) {
-    const token  = localStorage.getItem('fog_token');
-    const pubkey = localStorage.getItem('fog_wallet_pubkey') || '';
+    const token      = localStorage.getItem('fog_token');
+    const pubkey     = localStorage.getItem('fog_wallet_pubkey') || '';
+    const ethAddress = localStorage.getItem('fog_eth_address') || '';
     if (!token) throw new Error('Not authenticated');
-    gameClient = new GameClient(token, pubkey);
+    gameClient = new GameClient(token, pubkey, ethAddress);
   }
 }
 
@@ -68,9 +79,9 @@ export async function confirmDeposit(sessionId, txSig) {
 
 // ─── Session management ───────────────────────────────────────────────────
 
-export async function createSession(maxPlayers, entryFee, durationSeconds, botCount = 0) {
+export async function createSession(maxPlayers, entryFee, durationSeconds, botCount = 0, onChainSessionId = 0) {
   ensureClient();
-  return gameClient.createSession(maxPlayers, entryFee, durationSeconds, botCount);
+  return gameClient.createSession(maxPlayers, entryFee, durationSeconds, botCount, onChainSessionId);
 }
 
 export async function listSessions() {

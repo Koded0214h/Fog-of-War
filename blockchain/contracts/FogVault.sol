@@ -3,19 +3,20 @@ pragma solidity ^0.8.28;
 
 contract FogVault {
     // ─── State ────────────────────────────────────────────────
-    address public session;     // the FogSession contract that owns this vault
+    address public session;
     uint256 public entryFee;
     uint256 public totalPool;
     bool    public paid;
 
-    uint256 public constant HOUSE_CUT    = 10; // 10%
-    uint256 public constant WINNER_SHARE = 90; // 90%
+    uint256 public constant HOUSE_CUT    = 10;
+    uint256 public constant WINNER_SHARE = 90;
 
     mapping(address => uint256) public deposits;
 
     // ─── Events ───────────────────────────────────────────────
     event Deposited(address indexed player, uint256 amount);
     event Paid(address indexed winner, uint256 prize, uint256 houseCut);
+    event Refunded(address indexed player, uint256 amount);
 
     // ─── Modifiers ────────────────────────────────────────────
     modifier onlySession() {
@@ -30,7 +31,6 @@ contract FogVault {
     }
 
     // ─── Deposit ──────────────────────────────────────────────
-    /// @notice Called by FogSession when a player joins
     function deposit(address player) external payable onlySession {
         require(msg.value == entryFee, "Wrong deposit amount");
         require(deposits[player] == 0, "Already deposited");
@@ -42,7 +42,6 @@ contract FogVault {
     }
 
     // ─── Payout ───────────────────────────────────────────────
-    /// @notice Called by FogSession when session ends — pays winner 90%, house 10%
     function payout(address winner) external onlySession returns (uint256) {
         require(!paid, "Already paid out");
         require(totalPool > 0, "Empty pool");
@@ -52,10 +51,7 @@ contract FogVault {
         uint256 prize    = (totalPool * WINNER_SHARE) / 100;
         uint256 houseFee = totalPool - prize;
 
-        // Pay winner
         payable(winner).transfer(prize);
-
-        // Pay house (the session contract's owner via session)
         payable(session).transfer(houseFee);
 
         emit Paid(winner, prize, houseFee);
@@ -63,11 +59,28 @@ contract FogVault {
         return prize;
     }
 
+    // ─── Refund ───────────────────────────────────────────────
+    // Called by FogSession.refundSession when a session ends with no winner.
+    // Each player gets their exact deposit back.
+    function refundAll(address[] calldata players) external onlySession {
+        require(!paid, "Already paid out");
+
+        paid = true;
+
+        for (uint256 i = 0; i < players.length; i++) {
+            uint256 amount = deposits[players[i]];
+            if (amount > 0) {
+                deposits[players[i]] = 0;
+                payable(players[i]).transfer(amount);
+                emit Refunded(players[i], amount);
+            }
+        }
+    }
+
     // ─── View ─────────────────────────────────────────────────
     function getPool() external view returns (uint256) {
         return totalPool;
     }
 
-    // Allow vault to receive ETH directly if needed
     receive() external payable {}
 }
